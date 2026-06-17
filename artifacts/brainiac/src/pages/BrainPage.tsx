@@ -3,16 +3,16 @@ import { Wand2, Copy, Check, RefreshCw, ChevronDown, FileText, MessageSquare, Mi
 import { useGenerateDraft } from "@workspace/api-client-react";
 
 const DRAFT_TYPES = [
-  { id: "thread", label: "X Thread", icon: Twitter, desc: "Turn feed signals into a Twitter thread" },
-  { id: "recap", label: "Space Recap", icon: Mic, desc: "Summarize a Space you hosted" },
-  { id: "update", label: "Community Update", icon: MessageSquare, desc: "Weekly digest for your community" },
-  { id: "brief", label: "Alpha Brief", icon: FileText, desc: "Curated alpha report from your feed" },
+  { id: "thread",  label: "X Thread",          icon: Twitter,       desc: "Turn feed signals into a Twitter thread" },
+  { id: "recap",   label: "Space Recap",        icon: Mic,           desc: "Summarize a Space you hosted" },
+  { id: "update",  label: "Community Update",   icon: MessageSquare, desc: "Weekly digest for your community" },
+  { id: "brief",   label: "Alpha Brief",        icon: FileText,      desc: "Curated alpha report from your feed" },
 ];
 
-const mockDrafts = [
-  { id: 1, type: "X Thread", title: "Alpha thread - June 17", preview: "Biggest signals from Web3 this week that most people missed...", created: "2h ago" },
+const recentDrafts = [
+  { id: 1, type: "X Thread",    title: "Alpha thread - June 17",         preview: "Biggest signals from Web3 this week that most people missed...", created: "2h ago" },
   { id: 2, type: "Space Recap", title: "Recap: DeFi 2025 with Bankless", preview: "Yesterday's Space with @bankless covered 3 key narratives shaping DeFi this summer...", created: "1d ago" },
-  { id: 3, type: "Alpha Brief", title: "Weekly Alpha Brief #12", preview: "This week: Base DEX launch, LayerZero snapshot, and whale moves to watch...", created: "3d ago" },
+  { id: 3, type: "Alpha Brief", title: "Weekly Alpha Brief #12",          preview: "This week: Base DEX launch, LayerZero snapshot, and whale moves to watch...", created: "3d ago" },
 ];
 
 function CopyBtn({ text }: { text: string }) {
@@ -42,7 +42,7 @@ export default function BrainPage() {
         setError(null);
       },
       onError: () => {
-        setError("Failed to connect to AI service. Please check your QWEN_API_KEY and try again.");
+        setError("Something went wrong. Please try again in a moment.");
         setDraft(null);
       },
     },
@@ -65,17 +65,19 @@ export default function BrainPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto animate-fade-in">
+
       {/* Header */}
       <div className="mb-5 md:mb-6">
         <h1 className="font-display font-bold text-foreground text-xl md:text-2xl">Content Brain</h1>
         <p className="text-muted-foreground text-sm mt-0.5">Turn your feed into content that hits</p>
       </div>
 
-      {/* On mobile: stacked. On md+: 3-col grid */}
       <div className="grid md:grid-cols-3 gap-4 md:gap-5">
-        {/* Generator — full width on mobile, 2/3 on desktop */}
+
+        {/* Generator - full width on mobile, 2/3 on desktop */}
         <div className="md:col-span-2 space-y-4">
-          {/* Type selector */}
+
+          {/* Content type picker */}
           <div className="relative">
             <button
               data-testid="button-type-selector"
@@ -115,23 +117,23 @@ export default function BrainPage() {
             )}
           </div>
 
-          {/* Prompt */}
+          {/* Prompt input */}
           <div className="bg-card border border-border rounded-xl overflow-hidden focus-within:border-primary/40 transition-colors">
             <textarea
               data-testid="input-prompt"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder={`What should this ${selectedType.label} be about?`}
-              className="w-full bg-transparent px-4 py-3 text-foreground text-sm placeholder:text-muted-foreground/50 focus:outline-none resize-none min-h-[90px] md:min-h-[100px] leading-relaxed"
+              placeholder={`What should this ${selectedType.label} cover?`}
+              className="w-full bg-transparent px-4 py-3 text-foreground text-sm placeholder:text-muted-foreground/50 focus:outline-none resize-none min-h-[96px] leading-relaxed"
               rows={4}
             />
             <div className="flex items-center justify-between px-4 py-2.5 border-t border-border gap-2">
-              <p className="text-muted-foreground/50 text-xs hidden sm:block">AI will use your connected feed as context</p>
+              <p className="text-muted-foreground/50 text-xs hidden sm:block">Uses your connected feed as context</p>
               <button
                 data-testid="button-generate"
                 onClick={handleGenerate}
                 disabled={generateMutation.isPending || !prompt.trim()}
-                className="flex items-center gap-2 bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed text-primary-foreground text-sm font-medium px-4 py-2 rounded-lg transition-colors ml-auto"
+                className="flex items-center gap-2 bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed text-primary-foreground text-sm font-medium px-4 py-2 rounded-lg transition-colors ml-auto shrink-0"
               >
                 {generateMutation.isPending ? <RefreshCw size={13} className="animate-spin" /> : <Wand2 size={13} />}
                 {generateMutation.isPending ? "Writing..." : "Generate"}
@@ -139,7 +141,7 @@ export default function BrainPage() {
             </div>
           </div>
 
-          {/* Error */}
+          {/* Error state */}
           {error && !generateMutation.isPending && (
             <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
               <p className="text-red-400 text-sm">{error}</p>
@@ -158,7 +160,7 @@ export default function BrainPage() {
             <div className="bg-card border border-border rounded-xl p-5 md:p-6">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                <span className="text-muted-foreground text-sm">Brainiac is writing...</span>
+                <span className="text-muted-foreground text-sm">Writing your draft...</span>
               </div>
               <div className="space-y-2">
                 {[80, 60, 90, 50, 70].map((w, i) => (
@@ -195,11 +197,11 @@ export default function BrainPage() {
           )}
         </div>
 
-        {/* Saved drafts — appears below generator on mobile, right column on desktop */}
+        {/* Recent drafts sidebar */}
         <div>
           <h2 className="font-display font-semibold text-foreground text-sm mb-3">Recent drafts</h2>
           <div className="space-y-2">
-            {mockDrafts.map((d) => (
+            {recentDrafts.map((d) => (
               <div
                 key={d.id}
                 data-testid={`card-draft-${d.id}`}
@@ -207,7 +209,7 @@ export default function BrainPage() {
               >
                 <div className="flex items-center gap-2 mb-1.5">
                   <span className="text-xs text-primary bg-primary/10 px-1.5 py-0.5 rounded">{d.type}</span>
-                  <span className="text-muted-foreground/50 text-xs ml-auto">{d.created}</span>
+                  <span className="text-muted-foreground/50 text-xs ml-auto shrink-0">{d.created}</span>
                 </div>
                 <p className="text-foreground text-xs font-medium mb-1 leading-snug">{d.title}</p>
                 <p className="text-muted-foreground text-xs leading-relaxed line-clamp-2">{d.preview}</p>
@@ -216,9 +218,9 @@ export default function BrainPage() {
           </div>
 
           <div className="mt-4 bg-primary/5 border border-primary/15 rounded-xl p-4">
-            <p className="text-primary text-xs font-medium mb-2">Pro tip</p>
+            <p className="text-primary text-xs font-medium mb-1.5">Better drafts</p>
             <p className="text-muted-foreground text-xs leading-relaxed">
-              Connect more communities for richer context. The more feed Brainiac has, the better your drafts get.
+              Connect more communities for richer context. The more feed Brainiac has, the sharper your drafts get.
             </p>
           </div>
         </div>

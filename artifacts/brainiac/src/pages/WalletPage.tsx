@@ -176,7 +176,13 @@ export default function WalletPage() {
             <div className="flex items-center gap-2 mt-1">
               <span className="text-muted-foreground/60 text-xs font-mono">{short(wallet.address)}</span>
               <CopyButton text={wallet.address} />
-              <a href="#" data-testid="link-etherscan" className="text-muted-foreground/40 hover:text-muted-foreground transition-colors">
+              <a
+                href={`https://${wallet.chain === "Ethereum" ? "etherscan.io" : wallet.chain === "Base" ? "basescan.org" : wallet.chain === "Arbitrum" ? "arbiscan.io" : "etherscan.io"}/address/${wallet.address}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="link-etherscan"
+                className="text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+              >
                 <ExternalLink size={12} />
               </a>
             </div>

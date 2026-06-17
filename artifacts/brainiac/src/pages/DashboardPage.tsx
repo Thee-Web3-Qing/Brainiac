@@ -2,14 +2,14 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { Zap, Wallet, MessageSquare, TrendingUp, ArrowRight, Plus, Bell, TrendingDown } from "lucide-react";
 
-const mockFeed = [
+const feedItems = [
   { id: 1, source: "Discord", server: "Bankless DAO", msg: "Alpha drop: New DEX launching on Base tomorrow with $200K liquidity incentives. Early LPs get 3x boost.", time: "2m ago", hot: true },
   { id: 2, source: "Telegram", server: "Crypto Signals", msg: "Whale wallet 0x7f3a moved 500 ETH to Binance 20 mins ago. Keep watch on price action.", time: "11m ago", hot: true },
-  { id: 3, source: "Discord", server: "Base Builders", msg: "Community vote results are in: Proposal #14 passed with 78% approval. Treasury allocation confirmed.", time: "34m ago", hot: false },
+  { id: 3, source: "Discord", server: "Base Builders", msg: "Community vote results: Proposal #14 passed with 78% approval. Treasury allocation confirmed.", time: "34m ago", hot: false },
   { id: 4, source: "Telegram", server: "NFT Alpha", msg: "Floor on Pudgy Penguins up 12% in the last hour. Volume spike on Blur.", time: "1h ago", hot: false },
 ];
 
-const mockWallets = [
+const wallets = [
   { address: "0x7f3a...9e2b", label: "Main Wallet", chain: "Ethereum", projects: 14, pnl: "+$2,340", positive: true },
   { address: "0xc91d...4f7a", label: "Trading Wallet", chain: "Base", projects: 7, pnl: "-$180", positive: false },
 ];
@@ -24,13 +24,14 @@ export default function DashboardPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto animate-fade-in">
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6 md:mb-8">
         <div>
-          <p className="text-muted-foreground text-sm mb-0.5">{greeting} 👋</p>
+          <p className="text-muted-foreground text-sm mb-0.5">{greeting}</p>
           <h1 className="font-display font-bold text-foreground text-xl md:text-2xl">Your Web3 Brain</h1>
         </div>
-        <div className="flex items-center gap-2 md:gap-3">
+        <div className="flex items-center gap-2">
           <button
             data-testid="button-notifications"
             className="relative w-9 h-9 bg-card border border-border rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
@@ -54,15 +55,15 @@ export default function DashboardPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 md:gap-3 mb-6 md:mb-8">
         {[
-          { label: "New signals", value: "12", sub: "last 24h", icon: <Zap size={14} className="text-cyan-400" />, color: "text-cyan-400" },
-          { label: "Communities", value: "4", sub: "connected", icon: <MessageSquare size={14} className="text-primary" />, color: "text-primary" },
-          { label: "Wallets", value: "2", sub: "tracked", icon: <Wallet size={14} className="text-purple-400" />, color: "text-purple-400" },
-          { label: "Drafts", value: "8", sub: "AI-ready", icon: <TrendingUp size={14} className="text-green-400" />, color: "text-green-400" },
+          { label: "New signals",   value: "12", sub: "last 24h",  icon: <Zap size={14} className="text-cyan-400" />,      color: "text-cyan-400" },
+          { label: "Communities",   value: "4",  sub: "connected", icon: <MessageSquare size={14} className="text-primary" />, color: "text-primary" },
+          { label: "Wallets",       value: "2",  sub: "tracked",   icon: <Wallet size={14} className="text-purple-400" />,  color: "text-purple-400" },
+          { label: "Drafts",        value: "8",  sub: "ready",     icon: <TrendingUp size={14} className="text-green-400" />, color: "text-green-400" },
         ].map((s) => (
           <div
             key={s.label}
             data-testid={`card-stat-${s.label.toLowerCase().replace(" ", "-")}`}
-            className="bg-card border border-border rounded-2xl p-3.5 md:p-4 hover:border-border/80 transition-colors"
+            className="bg-card border border-border rounded-2xl p-3.5 md:p-4"
           >
             <div className="flex items-center gap-1.5 mb-2">
               {s.icon}
@@ -74,52 +75,12 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* Main grid: on mobile wallets+draft come FIRST, then feed */}
       <div className="grid md:grid-cols-3 gap-4 md:gap-5">
-        {/* Live Feed */}
-        <div className="md:col-span-2 bg-card rounded-2xl border border-border overflow-hidden">
-          <div className="flex items-center justify-between px-4 md:px-5 py-3.5 md:py-4 border-b border-border">
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500" />
-              </span>
-              <h2 className="font-display font-semibold text-foreground text-sm">Live Feed</h2>
-            </div>
-            <Link href="/feed" className="text-primary text-xs hover:text-primary/80 flex items-center gap-1 transition-colors">
-              View all <ArrowRight size={11} />
-            </Link>
-          </div>
-          <div className="divide-y divide-border">
-            {mockFeed.map((item) => (
-              <div
-                key={item.id}
-                data-testid={`card-feed-${item.id}`}
-                className="px-4 md:px-5 py-3 md:py-3.5 hover:bg-white/[0.02] transition-colors"
-              >
-                <div className="flex items-center gap-1.5 md:gap-2 mb-1.5 flex-wrap">
-                  <span className={`text-xs px-2 py-0.5 rounded-md font-medium shrink-0 ${
-                    item.source === "Discord"
-                      ? "bg-primary/15 text-primary"
-                      : "bg-cyan-500/15 text-cyan-400"
-                  }`}>
-                    {item.source}
-                  </span>
-                  <span className="text-muted-foreground/60 text-xs truncate max-w-[120px] md:max-w-none">{item.server}</span>
-                  <div className="flex items-center gap-1.5 ml-auto shrink-0">
-                    {item.hot && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-md bg-orange-500/15 text-orange-400">🔥</span>
-                    )}
-                    <span className="text-muted-foreground/50 text-xs">{item.time}</span>
-                  </div>
-                </div>
-                <p className="text-muted-foreground text-sm leading-relaxed line-clamp-2">{item.msg}</p>
-              </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Right column */}
-        <div className="space-y-4">
+        {/* Right column: wallets + quick draft — first on mobile, right on desktop */}
+        <div className="order-first md:order-last space-y-4">
+
           {/* Wallets */}
           <div className="bg-card rounded-2xl border border-border overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3.5 border-b border-border">
@@ -129,7 +90,7 @@ export default function DashboardPage() {
               </Link>
             </div>
             <div className="p-3 space-y-2">
-              {mockWallets.map((w) => (
+              {wallets.map((w) => (
                 <div key={w.address} data-testid={`card-wallet-${w.address}`} className="bg-background rounded-xl p-3">
                   <div className="flex items-start justify-between mb-1">
                     <p className="text-foreground text-xs font-medium">{w.label}</p>
@@ -158,7 +119,7 @@ export default function DashboardPage() {
 
           {/* Quick Draft */}
           <div className="bg-card rounded-2xl border border-border p-4">
-            <h2 className="font-display font-semibold text-foreground text-sm mb-2">Quick Draft</h2>
+            <h2 className="font-display font-semibold text-foreground text-sm mb-1.5">Quick Draft</h2>
             <p className="text-muted-foreground text-xs mb-3 leading-relaxed">Let AI turn today's feed into a thread or Space recap.</p>
             <Link href="/brain">
               <button
@@ -167,6 +128,50 @@ export default function DashboardPage() {
               >
                 Open Brain →
               </button>
+            </Link>
+          </div>
+        </div>
+
+        {/* Live Feed — full width on mobile (appears after wallets), 2/3 on desktop */}
+        <div className="md:col-span-2 order-last md:order-first bg-card rounded-2xl border border-border overflow-hidden">
+          <div className="flex items-center justify-between px-4 md:px-5 py-3.5 md:py-4 border-b border-border">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500" />
+              </span>
+              <h2 className="font-display font-semibold text-foreground text-sm">Live Feed</h2>
+            </div>
+            <Link href="/feed" className="text-primary text-xs hover:text-primary/80 flex items-center gap-1 transition-colors">
+              View all <ArrowRight size={11} />
+            </Link>
+          </div>
+          <div className="divide-y divide-border">
+            {feedItems.map((item, idx) => (
+              <div
+                key={item.id}
+                data-testid={`card-feed-${item.id}`}
+                className={`px-4 md:px-5 py-3 md:py-3.5 hover:bg-white/[0.02] transition-colors ${idx >= 2 ? "hidden md:block" : ""}`}
+              >
+                <div className="flex items-center gap-1.5 md:gap-2 mb-1.5 flex-wrap">
+                  <span className={`text-xs px-2 py-0.5 rounded-md font-medium shrink-0 ${
+                    item.source === "Discord" ? "bg-primary/15 text-primary" : "bg-cyan-500/15 text-cyan-400"
+                  }`}>
+                    {item.source}
+                  </span>
+                  <span className="text-muted-foreground/60 text-xs truncate max-w-[120px] md:max-w-none">{item.server}</span>
+                  <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                    {item.hot && <span className="text-xs text-orange-400">Hot</span>}
+                    <span className="text-muted-foreground/50 text-xs">{item.time}</span>
+                  </div>
+                </div>
+                <p className="text-muted-foreground text-sm leading-relaxed line-clamp-2">{item.msg}</p>
+              </div>
+            ))}
+          </div>
+          <div className="md:hidden px-4 py-3 border-t border-border">
+            <Link href="/feed" className="text-primary text-xs flex items-center gap-1 hover:text-primary/80 transition-colors">
+              See all signals <ArrowRight size={11} />
             </Link>
           </div>
         </div>
