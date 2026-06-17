@@ -39,32 +39,31 @@ function CopyableCode({ value }: { value: string }) {
 
 function ConnectModal({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<"discord" | "telegram">("discord");
-  const [discordMode, setDiscordMode] = useState<"member" | "admin">("member");
   const [name, setName] = useState("");
   const [discordAuthed, setDiscordAuthed] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [connected, setConnected] = useState(false);
 
-  const DISCORD_OAUTH_URL = "https://discord.com/api/oauth2/authorize?client_id=BRAINIAC_CLIENT_ID&scope=identify%20guilds&redirect_uri=https%3A%2F%2Fapp.brainiac.xyz%2Fconnect%2Fdiscord";
-  const DISCORD_BOT_URL = "https://discord.com/api/oauth2/authorize?client_id=BRAINIAC_CLIENT_ID&permissions=68608&scope=bot&redirect_uri=https%3A%2F%2Fapp.brainiac.xyz%2Fconnect%2Fdiscord";
+  const DISCORD_OAUTH_URL =
+    "https://discord.com/api/oauth2/authorize?client_id=BRAINIAC_CLIENT_ID&scope=identify%20guilds%20messages.read&redirect_uri=https%3A%2F%2Fapp.brainiac.xyz%2Fconnect%2Fdiscord";
 
   const handleConnect = () => {
     if (!name.trim()) return;
-    if (tab === "discord" && discordMode === "member" && !discordAuthed) return;
+    if (tab === "discord" && !discordAuthed) return;
     setConnecting(true);
     setTimeout(() => { setConnecting(false); setConnected(true); }, 1400);
     setTimeout(() => onClose(), 2600);
   };
 
   const handleDiscordAuth = () => {
-    window.open(discordMode === "member" ? DISCORD_OAUTH_URL : DISCORD_BOT_URL, "_blank", "width=500,height=700");
+    window.open(DISCORD_OAUTH_URL, "_blank", "width=500,height=700");
     setTimeout(() => setDiscordAuthed(true), 900);
   };
 
   const canConnect =
     !connecting &&
     name.trim().length > 0 &&
-    (tab === "telegram" || (tab === "discord" && (discordMode === "admin" || discordAuthed)));
+    (tab === "telegram" || discordAuthed);
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -72,7 +71,10 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h3 className="font-display font-semibold text-foreground">Connect a community</h3>
+          <div>
+            <h3 className="font-display font-semibold text-foreground">Add a source</h3>
+            <p className="text-muted-foreground text-xs mt-0.5">Brainiac reads from your own accounts</p>
+          </div>
           <button data-testid="button-close-modal" onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
             <X size={18} />
           </button>
@@ -105,112 +107,57 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
         ) : (
           <div className="p-5 space-y-4">
             {tab === "discord" ? (
-              <>
-                {/* Member / Admin toggle */}
-                <div className="flex bg-background rounded-xl p-1 border border-border gap-1">
-                  {(["member", "admin"] as const).map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => { setDiscordMode(m); setDiscordAuthed(false); }}
-                      className={`flex-1 py-2 text-xs font-medium rounded-lg transition-colors ${
-                        discordMode === m ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {m === "member" ? "I'm a member" : "I manage a server"}
-                    </button>
-                  ))}
+              <div className="space-y-3">
+                <div className="bg-background rounded-xl border border-border p-4">
+                  <p className="text-foreground text-xs font-semibold mb-1">Your account, your servers</p>
+                  <p className="text-muted-foreground text-xs leading-relaxed">
+                    Sign in with your Discord account. Brainiac reads servers and channels you already have access to, on your behalf. No admin setup, no bot installation required.
+                  </p>
                 </div>
 
-                {discordMode === "member" ? (
-                  <div className="space-y-3">
-                    <div className="bg-background rounded-xl border border-border p-4">
-                      <p className="text-foreground text-xs font-semibold mb-1">How this works</p>
-                      <p className="text-muted-foreground text-xs leading-relaxed">
-                        Sign in with your Discord account. Brainiac reads channels in servers you're already in, where your server admin has added the Brainiac bot. No setup needed on your end.
-                      </p>
-                    </div>
-
-                    {discordAuthed ? (
-                      <div className="flex items-center gap-2 px-3 py-2.5 bg-green-500/8 border border-green-500/20 rounded-xl">
-                        <Check size={14} className="text-green-400 shrink-0" />
-                        <span className="text-green-400 text-sm">Signed in to Discord</span>
-                      </div>
-                    ) : (
-                      <button
-                        data-testid="button-discord-auth"
-                        onClick={handleDiscordAuth}
-                        className="flex items-center justify-center gap-2 w-full bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/25 hover:border-[#5865F2]/50 text-[#7b84ff] text-sm font-medium py-2.5 rounded-xl transition-all"
-                      >
-                        Sign in with Discord <ExternalLink size={13} />
-                      </button>
-                    )}
-
-                    <input
-                      data-testid="input-community-name"
-                      disabled={!discordAuthed}
-                      type="text"
-                      placeholder="Which server? (e.g. Bankless DAO)"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-foreground text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-                    />
-
-                    {discordAuthed && (
-                      <p className="text-muted-foreground/50 text-xs">
-                        Server not active? Ask your admin to add Brainiac at <span className="text-primary">brainiac.xyz/add</span>
-                      </p>
-                    )}
+                {discordAuthed ? (
+                  <div className="flex items-center gap-2 px-3 py-2.5 bg-green-500/8 border border-green-500/20 rounded-xl">
+                    <Check size={14} className="text-green-400 shrink-0" />
+                    <span className="text-green-400 text-sm">Discord connected</span>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    <div className="bg-background rounded-xl border border-border p-4">
-                      <p className="text-foreground text-xs font-semibold mb-1">How this works</p>
-                      <p className="text-muted-foreground text-xs leading-relaxed">
-                        Authorize Brainiac's bot to join your server. It reads messages from channels you choose and surfaces them in your feed. Your members can then connect as members.
-                      </p>
-                    </div>
-
-                    {discordAuthed ? (
-                      <div className="flex items-center gap-2 px-3 py-2.5 bg-green-500/8 border border-green-500/20 rounded-xl">
-                        <Check size={14} className="text-green-400 shrink-0" />
-                        <span className="text-green-400 text-sm">Bot authorized</span>
-                      </div>
-                    ) : (
-                      <button
-                        data-testid="button-discord-auth"
-                        onClick={handleDiscordAuth}
-                        className="flex items-center justify-center gap-2 w-full bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/25 hover:border-[#5865F2]/50 text-[#7b84ff] text-sm font-medium py-2.5 rounded-xl transition-all"
-                      >
-                        Add Brainiac bot to my server <ExternalLink size={13} />
-                      </button>
-                    )}
-
-                    <input
-                      data-testid="input-community-name"
-                      type="text"
-                      placeholder="Server name (e.g. Bankless DAO)"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-foreground text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50"
-                    />
-                  </div>
+                  <button
+                    data-testid="button-discord-auth"
+                    onClick={handleDiscordAuth}
+                    className="flex items-center justify-center gap-2 w-full bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/25 hover:border-[#5865F2]/50 text-[#7b84ff] text-sm font-medium py-3 rounded-xl transition-all"
+                  >
+                    Sign in with Discord <ExternalLink size={13} />
+                  </button>
                 )}
-              </>
+
+                <div className="space-y-1.5">
+                  <p className="text-muted-foreground text-xs">Which server do you want to track?</p>
+                  <input
+                    data-testid="input-community-name"
+                    disabled={!discordAuthed}
+                    type="text"
+                    placeholder="e.g. Bankless DAO, NFT Hunters..."
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-foreground text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+                  />
+                </div>
+              </div>
             ) : (
-              <>
+              <div className="space-y-3">
                 <div className="bg-background rounded-xl border border-border p-4">
-                  <p className="text-foreground text-xs font-semibold mb-1">How this works</p>
+                  <p className="text-foreground text-xs font-semibold mb-1">Your account, your groups</p>
                   <p className="text-muted-foreground text-xs leading-relaxed">
-                    Start a DM with Brainiac's bot. Say <span className="text-foreground font-mono text-[11px]">/start</span> and it will walk you through linking your groups. You don't need to be the group admin.
+                    Message the Brainiac bot to link your Telegram account. It reads groups and channels you're already in. No admin access or group permissions needed.
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <p className="text-foreground text-xs font-medium">1. Open the bot on Telegram</p>
+                  <p className="text-foreground text-xs font-medium">1. Open the bot and say /start</p>
                   <div className="flex gap-2">
-                    <CopyableCode value="@BrainiacSignalBot" />
+                    <CopyableCode value="@brainiacaibot" />
                     <a
-                      href="https://t.me/BrainiacSignalBot"
+                      href="https://t.me/brainiacaibot"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-1.5 shrink-0 px-3 py-2.5 bg-cyan-500/8 hover:bg-cyan-500/15 border border-cyan-500/20 hover:border-cyan-500/35 text-cyan-400 text-xs font-medium rounded-xl transition-all"
@@ -218,20 +165,21 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
                       Open <ExternalLink size={12} />
                     </a>
                   </div>
+                  <p className="text-muted-foreground/50 text-xs pl-0.5">The bot will send you a link code to authorize your account.</p>
                 </div>
 
-                <div className="space-y-2">
-                  <p className="text-foreground text-xs font-medium">2. Label the group you're linking</p>
+                <div className="space-y-1.5">
+                  <p className="text-foreground text-xs font-medium">2. Which group do you want to track?</p>
                   <input
                     data-testid="input-community-name"
                     type="text"
-                    placeholder="Group name (e.g. Crypto Alpha)"
+                    placeholder="e.g. Crypto Alpha, Base Insiders..."
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-foreground text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50"
                   />
                 </div>
-              </>
+              </div>
             )}
 
             <button
