@@ -22,39 +22,43 @@ const connectedSources = [
   { name: "NFT Alpha", source: "Telegram", count: "8 today" },
 ];
 
-const DISCORD_STEPS = [
-  { n: "1", title: "Open your Discord server", sub: "Go to Server Settings in the bottom-left" },
-  { n: "2", title: "Integrations > Webhooks", sub: "Create a new webhook and name it Brainiac" },
-  { n: "3", title: "Copy the webhook URL", sub: "Click Copy Webhook URL and paste it below" },
-];
-
-function CopyableText({ value }: { value: string }) {
+function CopyableCode({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
       onClick={() => { navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-      className="flex items-center gap-2 w-full bg-background border border-border rounded-xl px-4 py-3 text-left hover:border-primary/40 transition-colors group"
+      className="flex items-center gap-3 w-full bg-background border border-border rounded-xl px-4 py-3 text-left hover:border-primary/40 transition-colors group"
     >
-      <span className="flex-1 text-foreground text-sm font-mono">{value}</span>
+      <span className="flex-1 text-foreground text-sm font-mono tracking-wide">{value}</span>
       {copied
-        ? <Check size={14} className="text-green-400 shrink-0" />
-        : <Copy size={14} className="text-muted-foreground/50 group-hover:text-muted-foreground shrink-0 transition-colors" />}
+        ? <span className="flex items-center gap-1 text-green-400 text-xs shrink-0"><Check size={12} /> Copied</span>
+        : <Copy size={13} className="text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 transition-colors" />}
     </button>
   );
 }
 
 function ConnectModal({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<"discord" | "telegram">("discord");
-  const [webhookUrl, setWebhookUrl] = useState("");
   const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [authorized, setAuthorized] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [connected, setConnected] = useState(false);
 
+  const DISCORD_OAUTH_URL =
+    "https://discord.com/api/oauth2/authorize?client_id=BRAINIAC_CLIENT_ID&permissions=68608&scope=bot&redirect_uri=https%3A%2F%2Fapp.brainiac.xyz%2Fconnect%2Fdiscord";
+
   const handleConnect = () => {
     if (!name.trim()) return;
+    if (tab === "telegram" && !code.trim()) return;
     setConnecting(true);
     setTimeout(() => { setConnecting(false); setConnected(true); }, 1400);
     setTimeout(() => onClose(), 2600);
+  };
+
+  const handleDiscordAuth = () => {
+    window.open(DISCORD_OAUTH_URL, "_blank", "width=500,height=700");
+    setTimeout(() => setAuthorized(true), 800);
   };
 
   return (
@@ -69,17 +73,15 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* Tab selector */}
+        {/* Tabs */}
         <div className="flex border-b border-border">
           {(["discord", "telegram"] as const).map((t) => (
             <button
               key={t}
               data-testid={`button-tab-${t}`}
-              onClick={() => setTab(t)}
+              onClick={() => { setTab(t); setAuthorized(false); setName(""); setCode(""); }}
               className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                tab === t
-                  ? "text-foreground border-b-2 border-primary"
-                  : "text-muted-foreground hover:text-foreground"
+                tab === t ? "text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {t === "discord" ? "Discord" : "Telegram"}
@@ -89,87 +91,121 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
 
         {connected ? (
           <div className="p-8 flex flex-col items-center gap-3 text-center">
-            <div className="w-12 h-12 bg-green-500/10 rounded-full flex items-center justify-center">
+            <div className="w-12 h-12 bg-green-500/10 border border-green-500/20 rounded-full flex items-center justify-center">
               <Check size={22} className="text-green-400" />
             </div>
             <p className="font-display font-semibold text-foreground">Connected</p>
-            <p className="text-muted-foreground text-sm">Syncing messages from {name || "your community"}...</p>
+            <p className="text-muted-foreground text-sm">Syncing messages from {name}...</p>
           </div>
         ) : (
-          <div className="p-5 space-y-5">
+          <div className="p-5 space-y-4">
             {tab === "discord" ? (
               <>
-                {/* Steps */}
-                <div className="space-y-3">
-                  {DISCORD_STEPS.map((s) => (
-                    <div key={s.n} className="flex gap-3 items-start">
-                      <div className="w-6 h-6 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center shrink-0 mt-0.5">
-                        <span className="text-primary text-xs font-bold">{s.n}</span>
-                      </div>
-                      <div>
-                        <p className="text-foreground text-sm font-medium">{s.title}</p>
-                        <p className="text-muted-foreground text-xs mt-0.5">{s.sub}</p>
-                      </div>
-                    </div>
-                  ))}
+                {/* How it works callout */}
+                <div className="bg-background rounded-xl border border-border p-4">
+                  <p className="text-foreground text-xs font-semibold mb-1">How this works</p>
+                  <p className="text-muted-foreground text-xs leading-relaxed">
+                    You authorize Brainiac's bot to join your server. It reads messages in the channels you choose and surfaces signals in your feed. No data is stored permanently - only recent signals.
+                  </p>
                 </div>
 
-                <a
-                  href="https://discord.com/channels/@me"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 w-full bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/30 hover:border-[#5865F2]/50 text-[#7b84ff] text-sm font-medium py-2.5 rounded-xl transition-all"
-                >
-                  Open Discord <ExternalLink size={13} />
-                </a>
+                {/* Step 1 - Authorize */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-xs font-bold transition-colors ${authorized ? "bg-green-500/15 border border-green-500/30 text-green-400" : "bg-primary/15 border border-primary/30 text-primary"}`}>
+                      {authorized ? <Check size={11} /> : "1"}
+                    </div>
+                    <p className={`text-sm font-medium ${authorized ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                      Authorize Brainiac on Discord
+                    </p>
+                  </div>
+                  {!authorized && (
+                    <button
+                      data-testid="button-discord-auth"
+                      onClick={handleDiscordAuth}
+                      className="ml-7 flex items-center gap-2 bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/25 hover:border-[#5865F2]/50 text-[#7b84ff] text-sm font-medium px-4 py-2.5 rounded-xl transition-all w-full justify-center"
+                    >
+                      Add to Discord server <ExternalLink size={13} />
+                    </button>
+                  )}
+                </div>
 
-                <div className="space-y-2.5">
-                  <input
-                    data-testid="input-webhook-url"
-                    type="text"
-                    placeholder="https://discord.com/api/webhooks/..."
-                    value={webhookUrl}
-                    onChange={(e) => setWebhookUrl(e.target.value)}
-                    className="w-full bg-background border border-border rounded-xl px-4 py-3 text-foreground text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50 font-mono"
-                  />
+                {/* Step 2 - Label */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-xs font-bold border ${authorized ? "bg-primary/15 border-primary/30 text-primary" : "border-border text-muted-foreground/40"}`}>
+                      2
+                    </div>
+                    <p className={`text-sm font-medium ${authorized ? "text-foreground" : "text-muted-foreground/40"}`}>
+                      Label this server
+                    </p>
+                  </div>
                   <input
                     data-testid="input-community-name"
+                    disabled={!authorized}
                     type="text"
-                    placeholder="Server name (e.g. Bankless DAO)"
+                    placeholder="e.g. Bankless DAO"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-background border border-border rounded-xl px-4 py-3 text-foreground text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50"
+                    className="ml-7 w-[calc(100%-1.75rem)] bg-background border border-border rounded-xl px-4 py-2.5 text-foreground text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
                   />
                 </div>
               </>
             ) : (
               <>
-                <div className="bg-background rounded-xl p-4 border border-border space-y-3">
-                  <p className="text-foreground text-sm font-medium">Add our bot to your group</p>
+                {/* How it works */}
+                <div className="bg-background rounded-xl border border-border p-4">
+                  <p className="text-foreground text-xs font-semibold mb-1">How this works</p>
                   <p className="text-muted-foreground text-xs leading-relaxed">
-                    Open your Telegram group, go to Add Members, and search for the bot below. Make it an admin so it can read messages.
+                    Add Brainiac's bot to your group as an admin. Then send it your unique link code inside the chat so it knows which account to link the group to.
                   </p>
-                  <CopyableText value="@BrainiacSignalBot" />
                 </div>
 
-                <a
-                  href="https://t.me/BrainiacSignalBot?startgroup=true"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 w-full bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 hover:border-cyan-500/40 text-cyan-400 text-sm font-medium py-2.5 rounded-xl transition-all"
-                >
-                  Add bot to Telegram group <ExternalLink size={13} />
-                </a>
+                {/* Step 1 - Add bot */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center shrink-0 text-xs font-bold text-primary">1</div>
+                    <p className="text-foreground text-sm font-medium">Add the bot to your group</p>
+                  </div>
+                  <div className="ml-7 space-y-2">
+                    <CopyableCode value="@BrainiacSignalBot" />
+                    <a
+                      href="https://t.me/BrainiacSignalBot?startgroup=true"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 w-full bg-cyan-500/8 hover:bg-cyan-500/15 border border-cyan-500/20 hover:border-cyan-500/35 text-cyan-400 text-sm font-medium py-2.5 rounded-xl transition-all"
+                    >
+                      Open Telegram to add bot <ExternalLink size={13} />
+                    </a>
+                    <p className="text-muted-foreground/50 text-xs">Make the bot an admin so it can read messages.</p>
+                  </div>
+                </div>
 
-                <div className="space-y-2.5">
-                  <p className="text-muted-foreground text-xs">Once added, enter the group or channel name:</p>
+                {/* Step 2 - Send code */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center shrink-0 text-xs font-bold text-primary">2</div>
+                    <p className="text-foreground text-sm font-medium">Send your link code in the group chat</p>
+                  </div>
+                  <div className="ml-7 space-y-2">
+                    <CopyableCode value="/link brn_a3f9c7d2e1b8" />
+                    <p className="text-muted-foreground/50 text-xs">Send this command in the group. The bot will confirm and link it to your account.</p>
+                  </div>
+                </div>
+
+                {/* Step 3 - Label */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center shrink-0 text-xs font-bold text-primary">3</div>
+                    <p className="text-foreground text-sm font-medium">Give this group a label</p>
+                  </div>
                   <input
                     data-testid="input-community-name"
                     type="text"
-                    placeholder="Group name (e.g. Crypto Alpha)"
+                    placeholder="e.g. Crypto Alpha"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-background border border-border rounded-xl px-4 py-3 text-foreground text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50"
+                    className="ml-7 w-[calc(100%-1.75rem)] bg-background border border-border rounded-xl px-4 py-2.5 text-foreground text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50"
                   />
                 </div>
               </>
@@ -178,14 +214,12 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
             <button
               data-testid="button-connect-confirm"
               onClick={handleConnect}
-              disabled={connecting || !name.trim() || (tab === "discord" && !webhookUrl.trim())}
-              className="w-full py-3 bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed text-primary-foreground rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
+              disabled={connecting || !name.trim() || (tab === "discord" && !authorized) || (tab === "telegram" && !code && !name.trim())}
+              className="w-full py-3 bg-primary hover:bg-primary/90 disabled:opacity-35 disabled:cursor-not-allowed text-primary-foreground rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2 mt-2"
             >
-              {connecting ? (
-                <><RefreshCw size={14} className="animate-spin" /> Connecting...</>
-              ) : (
-                `Connect ${tab === "discord" ? "Discord" : "Telegram"}`
-              )}
+              {connecting
+                ? <><RefreshCw size={14} className="animate-spin" /> Connecting...</>
+                : `Connect ${tab === "discord" ? "Discord server" : "Telegram group"}`}
             </button>
           </div>
         )}
