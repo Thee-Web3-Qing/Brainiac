@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { Wand2, Copy, Check, RefreshCw, ChevronDown, FileText, MessageSquare, Mic } from "lucide-react";
+import { Wand2, Copy, Check, RefreshCw, ChevronDown, FileText, MessageSquare, Mic, Twitter } from "lucide-react";
 import { useGenerateDraft } from "@workspace/api-client-react";
-import { Twitter } from "lucide-react";
 
 const DRAFT_TYPES = [
   { id: "thread", label: "X Thread", icon: Twitter, desc: "Turn feed signals into a Twitter thread" },
@@ -65,15 +64,16 @@ export default function BrainPage() {
   const TypeIcon = selectedType.icon;
 
   return (
-    <div className="p-6 max-w-4xl mx-auto animate-fade-in">
+    <div className="p-4 md:p-6 max-w-4xl mx-auto animate-fade-in">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="font-display font-bold text-foreground text-2xl">Content Brain</h1>
+      <div className="mb-5 md:mb-6">
+        <h1 className="font-display font-bold text-foreground text-xl md:text-2xl">Content Brain</h1>
         <p className="text-muted-foreground text-sm mt-0.5">Turn your feed into content that hits</p>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-5">
-        {/* Generator — left 2/3 */}
+      {/* On mobile: stacked. On md+: 3-col grid */}
+      <div className="grid md:grid-cols-3 gap-4 md:gap-5">
+        {/* Generator — full width on mobile, 2/3 on desktop */}
         <div className="md:col-span-2 space-y-4">
           {/* Type selector */}
           <div className="relative">
@@ -82,18 +82,18 @@ export default function BrainPage() {
               onClick={() => setShowTypeMenu(!showTypeMenu)}
               className="w-full flex items-center justify-between bg-card border border-border rounded-xl px-4 py-3 text-left transition-colors hover:border-border/80"
             >
-              <div className="flex items-center gap-3">
-                <TypeIcon size={16} className="text-primary" />
-                <div>
+              <div className="flex items-center gap-3 min-w-0">
+                <TypeIcon size={16} className="text-primary shrink-0" />
+                <div className="min-w-0">
                   <p className="text-foreground text-sm font-medium">{selectedType.label}</p>
-                  <p className="text-muted-foreground text-xs">{selectedType.desc}</p>
+                  <p className="text-muted-foreground text-xs truncate">{selectedType.desc}</p>
                 </div>
               </div>
-              <ChevronDown size={15} className={`text-muted-foreground transition-transform ${showTypeMenu ? "rotate-180" : ""}`} />
+              <ChevronDown size={15} className={`text-muted-foreground transition-transform shrink-0 ml-2 ${showTypeMenu ? "rotate-180" : ""}`} />
             </button>
 
             {showTypeMenu && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl overflow-hidden z-10 animate-slide-up">
+              <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-xl overflow-hidden z-10 animate-slide-up shadow-xl">
                 {DRAFT_TYPES.map((type) => {
                   const Icon = type.icon;
                   return (
@@ -103,7 +103,7 @@ export default function BrainPage() {
                       onClick={() => { setSelectedType(type); setShowTypeMenu(false); }}
                       className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/5 transition-colors ${type.id === selectedType.id ? "bg-primary/10" : ""}`}
                     >
-                      <Icon size={14} className="text-primary" />
+                      <Icon size={14} className="text-primary shrink-0" />
                       <div>
                         <p className="text-foreground text-sm">{type.label}</p>
                         <p className="text-muted-foreground text-xs">{type.desc}</p>
@@ -115,23 +115,23 @@ export default function BrainPage() {
             )}
           </div>
 
-          {/* Prompt textarea */}
+          {/* Prompt */}
           <div className="bg-card border border-border rounded-xl overflow-hidden focus-within:border-primary/40 transition-colors">
             <textarea
               data-testid="input-prompt"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder={`What should this ${selectedType.label} be about? e.g. "The Base DEX launch and what it means for LPs"`}
-              className="w-full bg-transparent px-4 py-3 text-foreground text-sm placeholder:text-muted-foreground/50 focus:outline-none resize-none min-h-[100px] leading-relaxed"
+              placeholder={`What should this ${selectedType.label} be about?`}
+              className="w-full bg-transparent px-4 py-3 text-foreground text-sm placeholder:text-muted-foreground/50 focus:outline-none resize-none min-h-[90px] md:min-h-[100px] leading-relaxed"
               rows={4}
             />
-            <div className="flex items-center justify-between px-4 py-2.5 border-t border-border">
-              <p className="text-muted-foreground/50 text-xs">AI will use your connected feed as context</p>
+            <div className="flex items-center justify-between px-4 py-2.5 border-t border-border gap-2">
+              <p className="text-muted-foreground/50 text-xs hidden sm:block">AI will use your connected feed as context</p>
               <button
                 data-testid="button-generate"
                 onClick={handleGenerate}
                 disabled={generateMutation.isPending || !prompt.trim()}
-                className="flex items-center gap-2 bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed text-primary-foreground text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                className="flex items-center gap-2 bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed text-primary-foreground text-sm font-medium px-4 py-2 rounded-lg transition-colors ml-auto"
               >
                 {generateMutation.isPending ? <RefreshCw size={13} className="animate-spin" /> : <Wand2 size={13} />}
                 {generateMutation.isPending ? "Writing..." : "Generate"}
@@ -139,7 +139,7 @@ export default function BrainPage() {
             </div>
           </div>
 
-          {/* Error state */}
+          {/* Error */}
           {error && !generateMutation.isPending && (
             <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
               <p className="text-red-400 text-sm">{error}</p>
@@ -155,7 +155,7 @@ export default function BrainPage() {
 
           {/* Loading skeleton */}
           {generateMutation.isPending && (
-            <div className="bg-card border border-border rounded-xl p-6">
+            <div className="bg-card border border-border rounded-xl p-5 md:p-6">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
                 <span className="text-muted-foreground text-sm">Brainiac is writing...</span>
@@ -171,11 +171,11 @@ export default function BrainPage() {
           {/* Draft output */}
           {draft && !generateMutation.isPending && (
             <div className="bg-card border border-primary/20 rounded-xl overflow-hidden animate-slide-up">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
                   <span className="text-foreground text-sm font-medium">Draft ready</span>
-                  <span className="text-muted-foreground text-xs">· {selectedType.label}</span>
+                  <span className="text-muted-foreground text-xs hidden sm:inline">· {selectedType.label}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <CopyBtn text={draft} />
@@ -195,7 +195,7 @@ export default function BrainPage() {
           )}
         </div>
 
-        {/* Saved drafts — right 1/3 */}
+        {/* Saved drafts — appears below generator on mobile, right column on desktop */}
         <div>
           <h2 className="font-display font-semibold text-foreground text-sm mb-3">Recent drafts</h2>
           <div className="space-y-2">
@@ -215,7 +215,6 @@ export default function BrainPage() {
             ))}
           </div>
 
-          {/* Pro tip */}
           <div className="mt-4 bg-primary/5 border border-primary/15 rounded-xl p-4">
             <p className="text-primary text-xs font-medium mb-2">Pro tip</p>
             <p className="text-muted-foreground text-xs leading-relaxed">

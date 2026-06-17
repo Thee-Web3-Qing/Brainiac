@@ -23,14 +23,14 @@ export default function DashboardPage() {
   });
 
   return (
-    <div className="p-6 max-w-5xl mx-auto animate-fade-in">
+    <div className="p-4 md:p-6 max-w-5xl mx-auto animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6 md:mb-8">
         <div>
-          <p className="text-muted-foreground text-sm mb-1">{greeting} 👋</p>
-          <h1 className="font-display font-bold text-foreground text-2xl">Your Web3 Brain</h1>
+          <p className="text-muted-foreground text-sm mb-0.5">{greeting} 👋</p>
+          <h1 className="font-display font-bold text-foreground text-xl md:text-2xl">Your Web3 Brain</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3">
           <button
             data-testid="button-notifications"
             className="relative w-9 h-9 bg-card border border-border rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
@@ -41,16 +41,18 @@ export default function DashboardPage() {
           <Link href="/feed">
             <button
               data-testid="button-connect-source"
-              className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium px-4 py-2 rounded-xl transition-colors"
+              className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium px-3 md:px-4 py-2 rounded-xl transition-colors"
             >
-              <Plus size={14} /> Connect source
+              <Plus size={14} />
+              <span className="hidden sm:inline">Connect source</span>
+              <span className="sm:hidden">Connect</span>
             </button>
           </Link>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 md:gap-3 mb-6 md:mb-8">
         {[
           { label: "New signals", value: "12", sub: "last 24h", icon: <Zap size={14} className="text-cyan-400" />, color: "text-cyan-400" },
           { label: "Communities", value: "4", sub: "connected", icon: <MessageSquare size={14} className="text-primary" />, color: "text-primary" },
@@ -60,22 +62,22 @@ export default function DashboardPage() {
           <div
             key={s.label}
             data-testid={`card-stat-${s.label.toLowerCase().replace(" ", "-")}`}
-            className="bg-card border border-border rounded-2xl p-4 hover:border-border/80 transition-colors"
+            className="bg-card border border-border rounded-2xl p-3.5 md:p-4 hover:border-border/80 transition-colors"
           >
             <div className="flex items-center gap-1.5 mb-2">
               {s.icon}
-              <span className="text-muted-foreground text-xs">{s.label}</span>
+              <span className="text-muted-foreground text-xs truncate">{s.label}</span>
             </div>
-            <p className={`font-display font-bold text-2xl ${s.color}`}>{s.value}</p>
+            <p className={`font-display font-bold text-xl md:text-2xl ${s.color}`}>{s.value}</p>
             <p className="text-muted-foreground/60 text-xs mt-0.5">{s.sub}</p>
           </div>
         ))}
       </div>
 
-      <div className="grid md:grid-cols-3 gap-5">
+      <div className="grid md:grid-cols-3 gap-4 md:gap-5">
         {/* Live Feed */}
         <div className="md:col-span-2 bg-card rounded-2xl border border-border overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="flex items-center justify-between px-4 md:px-5 py-3.5 md:py-4 border-b border-border">
             <div className="flex items-center gap-2">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
@@ -92,21 +94,23 @@ export default function DashboardPage() {
               <div
                 key={item.id}
                 data-testid={`card-feed-${item.id}`}
-                className="px-5 py-3.5 hover:bg-white/[0.02] transition-colors"
+                className="px-4 md:px-5 py-3 md:py-3.5 hover:bg-white/[0.02] transition-colors"
               >
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className={`text-xs px-2 py-0.5 rounded-md font-medium ${
+                <div className="flex items-center gap-1.5 md:gap-2 mb-1.5 flex-wrap">
+                  <span className={`text-xs px-2 py-0.5 rounded-md font-medium shrink-0 ${
                     item.source === "Discord"
                       ? "bg-primary/15 text-primary"
                       : "bg-cyan-500/15 text-cyan-400"
                   }`}>
                     {item.source}
                   </span>
-                  <span className="text-muted-foreground/60 text-xs">{item.server}</span>
-                  {item.hot && (
-                    <span className="text-xs px-1.5 py-0.5 rounded-md bg-orange-500/15 text-orange-400 ml-auto">🔥 Hot</span>
-                  )}
-                  <span className={`text-muted-foreground/50 text-xs ${item.hot ? "" : "ml-auto"}`}>{item.time}</span>
+                  <span className="text-muted-foreground/60 text-xs truncate max-w-[120px] md:max-w-none">{item.server}</span>
+                  <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                    {item.hot && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-md bg-orange-500/15 text-orange-400">🔥</span>
+                    )}
+                    <span className="text-muted-foreground/50 text-xs">{item.time}</span>
+                  </div>
                 </div>
                 <p className="text-muted-foreground text-sm leading-relaxed line-clamp-2">{item.msg}</p>
               </div>
@@ -129,7 +133,7 @@ export default function DashboardPage() {
                 <div key={w.address} data-testid={`card-wallet-${w.address}`} className="bg-background rounded-xl p-3">
                   <div className="flex items-start justify-between mb-1">
                     <p className="text-foreground text-xs font-medium">{w.label}</p>
-                    <span className={`text-xs font-medium flex items-center gap-1 ${w.positive ? "text-green-400" : "text-red-400"}`}>
+                    <span className={`text-xs font-medium flex items-center gap-1 shrink-0 ml-2 ${w.positive ? "text-green-400" : "text-red-400"}`}>
                       {w.positive ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
                       {w.pnl}
                     </span>
@@ -154,7 +158,7 @@ export default function DashboardPage() {
 
           {/* Quick Draft */}
           <div className="bg-card rounded-2xl border border-border p-4">
-            <h2 className="font-display font-semibold text-foreground text-sm mb-3">Quick Draft</h2>
+            <h2 className="font-display font-semibold text-foreground text-sm mb-2">Quick Draft</h2>
             <p className="text-muted-foreground text-xs mb-3 leading-relaxed">Let AI turn today's feed into a thread or Space recap.</p>
             <Link href="/brain">
               <button

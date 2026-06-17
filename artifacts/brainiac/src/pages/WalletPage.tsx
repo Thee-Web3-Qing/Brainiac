@@ -61,15 +61,15 @@ function CopyButton({ text }: { text: string }) {
 
 function AddWalletModal({ onClose }: { onClose: () => void }) {
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-md animate-slide-up">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full max-w-md animate-slide-up">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h3 className="font-display font-semibold text-foreground">Add wallet</h3>
           <button data-testid="button-close-modal" onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
             <X size={18} />
           </button>
         </div>
-        <div className="p-6 space-y-4">
+        <div className="p-5 space-y-4">
           <div>
             <label className="text-muted-foreground text-xs block mb-2">Wallet address</label>
             <input
@@ -121,56 +121,58 @@ export default function WalletPage() {
   const short = (addr: string) => addr.slice(0, 6) + "..." + addr.slice(-4);
 
   return (
-    <div className="p-6 max-w-4xl mx-auto animate-fade-in">
+    <div className="p-4 md:p-6 max-w-4xl mx-auto animate-fade-in">
       {showModal && <AddWalletModal onClose={() => setShowModal(false)} />}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-5 md:mb-6">
         <div>
-          <h1 className="font-display font-bold text-foreground text-2xl">Wallet Memory</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Your on-chain history, made readable</p>
+          <h1 className="font-display font-bold text-foreground text-xl md:text-2xl">Wallet Memory</h1>
+          <p className="text-muted-foreground text-sm mt-0.5 hidden sm:block">Your on-chain history, made readable</p>
         </div>
         <button
           data-testid="button-add-wallet"
           onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium px-4 py-2 rounded-xl transition-colors"
+          className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium px-3 md:px-4 py-2 rounded-xl transition-colors"
         >
-          <Plus size={14} /> Add wallet
+          <Plus size={14} />
+          <span className="hidden sm:inline">Add wallet</span>
+          <span className="sm:hidden">Add</span>
         </button>
       </div>
 
-      {/* Wallet tabs */}
-      <div className="flex items-center gap-2 mb-6 flex-wrap">
+      {/* Wallet tabs — horizontal scroll on mobile */}
+      <div className="flex items-center gap-2 mb-5 md:mb-6 overflow-x-auto scrollbar-none pb-0.5">
         {mockWallets.map((w) => (
           <button
             key={w.id}
             data-testid={`button-wallet-tab-${w.id}`}
             onClick={() => setActiveWallet(w.id)}
-            className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border text-sm transition-all ${
+            className={`flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2.5 rounded-xl border text-sm transition-all shrink-0 ${
               activeWallet === w.id
                 ? "bg-primary/15 border-primary/40 text-foreground"
                 : "bg-card border-border text-muted-foreground hover:border-border/80"
             }`}
           >
-            <div className={`w-2 h-2 rounded-full ${w.positive ? "bg-green-400" : "bg-red-400"}`} />
+            <div className={`w-2 h-2 rounded-full shrink-0 ${w.positive ? "bg-green-400" : "bg-red-400"}`} />
             <span className="font-medium">{w.label}</span>
-            <span className="font-mono text-xs text-muted-foreground/60">{short(w.address)}</span>
+            <span className="font-mono text-xs text-muted-foreground/60 hidden sm:inline">{short(w.address)}</span>
           </button>
         ))}
         <button
           data-testid="button-add-wallet-tab"
           onClick={() => setShowModal(true)}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-border/80 text-sm transition-all"
+          className="flex items-center gap-1.5 px-3 md:px-4 py-2.5 rounded-xl border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-border/80 text-sm transition-all shrink-0"
         >
           <Plus size={13} /> Add
         </button>
       </div>
 
       {/* Wallet summary */}
-      <div className="bg-card rounded-2xl border border-border p-5 mb-5">
+      <div className="bg-card rounded-2xl border border-border p-4 md:p-5 mb-4 md:mb-5">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <p className="font-display font-bold text-foreground text-lg">{wallet.label}</p>
+            <p className="font-display font-bold text-foreground text-base md:text-lg">{wallet.label}</p>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-muted-foreground/60 text-xs font-mono">{short(wallet.address)}</span>
               <CopyButton text={wallet.address} />
@@ -180,14 +182,14 @@ export default function WalletPage() {
             </div>
           </div>
           <div className="text-right">
-            <div className={`flex items-center gap-1 justify-end text-lg font-display font-bold ${wallet.positive ? "text-green-400" : "text-red-400"}`}>
-              {wallet.positive ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+            <div className={`flex items-center gap-1 justify-end text-base md:text-lg font-display font-bold ${wallet.positive ? "text-green-400" : "text-red-400"}`}>
+              {wallet.positive ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
               {wallet.pnl}
             </div>
-            <p className="text-muted-foreground/50 text-xs mt-0.5">estimated P&L</p>
+            <p className="text-muted-foreground/50 text-xs mt-0.5">est. P&L</p>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-2 md:gap-3">
           {[
             { label: "Chain", value: wallet.chain },
             { label: "Projects", value: wallet.projects.length },
@@ -201,9 +203,9 @@ export default function WalletPage() {
         </div>
       </div>
 
-      {/* Projects table */}
+      {/* Projects */}
       <div className="bg-card rounded-2xl border border-border overflow-hidden">
-        <div className="px-5 py-4 border-b border-border">
+        <div className="px-4 md:px-5 py-3.5 md:py-4 border-b border-border">
           <h2 className="font-display font-semibold text-foreground text-sm">Projects interacted with</h2>
         </div>
         <div className="divide-y divide-border">
@@ -211,22 +213,23 @@ export default function WalletPage() {
             <div
               key={i}
               data-testid={`row-project-${p.name.toLowerCase()}`}
-              className="flex items-center gap-4 px-5 py-3.5 hover:bg-white/[0.02] transition-colors"
+              className="flex items-center gap-3 md:gap-4 px-4 md:px-5 py-3 md:py-3.5 hover:bg-white/[0.02] transition-colors"
             >
               <div className="w-8 h-8 bg-background rounded-lg flex items-center justify-center text-xs font-bold text-muted-foreground shrink-0 border border-border">
                 {p.name[0]}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-foreground text-sm font-medium">{p.name}</p>
+                <p className="text-foreground text-sm font-medium truncate">{p.name}</p>
                 <p className="text-muted-foreground/50 text-xs">{p.date}</p>
               </div>
-              <span className={`text-xs px-2 py-0.5 rounded-md ${TYPE_STYLES[p.type] || "bg-muted text-muted-foreground"}`}>
+              {/* Hide type on smallest screens */}
+              <span className={`hidden sm:inline-flex text-xs px-2 py-0.5 rounded-md shrink-0 ${TYPE_STYLES[p.type] || "bg-muted text-muted-foreground"}`}>
                 {p.type}
               </span>
-              <span className={`text-xs px-2 py-0.5 rounded-md ${STATUS_STYLES[p.status]}`}>
+              <span className={`text-xs px-2 py-0.5 rounded-md shrink-0 ${STATUS_STYLES[p.status]}`}>
                 {p.status}
               </span>
-              <span className="text-foreground text-sm font-medium w-20 text-right">{p.value}</span>
+              <span className="text-foreground text-sm font-medium shrink-0 text-right min-w-[3rem]">{p.value}</span>
             </div>
           ))}
         </div>

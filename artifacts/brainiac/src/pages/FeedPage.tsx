@@ -27,15 +27,15 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
   const [selected, setSelected] = useState<string | null>(null);
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-md animate-slide-up">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full max-w-md animate-slide-up">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h3 className="font-display font-semibold text-foreground">Connect a community</h3>
           <button data-testid="button-close-modal" onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
             <X size={18} />
           </button>
         </div>
-        <div className="p-6">
+        <div className="p-5">
           {step === 1 && (
             <div className="space-y-3">
               <p className="text-muted-foreground text-sm mb-4">Choose where to pull signals from:</p>
@@ -113,14 +113,14 @@ export default function FeedPage() {
   });
 
   return (
-    <div className="p-6 max-w-4xl mx-auto animate-fade-in">
+    <div className="p-4 md:p-6 max-w-4xl mx-auto animate-fade-in">
       {showModal && <ConnectModal onClose={() => setShowModal(false)} />}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-5 md:mb-6">
         <div>
-          <h1 className="font-display font-bold text-foreground text-2xl">Feed Intelligence</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Signal from your communities, filtered by AI</p>
+          <h1 className="font-display font-bold text-foreground text-xl md:text-2xl">Feed Intelligence</h1>
+          <p className="text-muted-foreground text-sm mt-0.5 hidden sm:block">Signal from your communities, filtered by AI</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -132,18 +132,18 @@ export default function FeedPage() {
           <button
             data-testid="button-connect"
             onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium px-4 py-2 rounded-xl transition-colors"
+            className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium px-3 md:px-4 py-2 rounded-xl transition-colors"
           >
             <Plus size={14} /> Connect
           </button>
         </div>
       </div>
 
-      {/* Connected sources */}
-      <div className="grid grid-cols-2 gap-3 mb-6">
+      {/* Connected sources — 1 col on very small, 2 col otherwise */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5">
         {connectedSources.map((src) => (
           <div key={src.name} data-testid={`card-source-${src.name.replace(" ", "-").toLowerCase()}`} className="flex items-center gap-3 bg-card border border-border rounded-xl px-3 py-2.5">
-            <span className="relative flex h-2 w-2">
+            <span className="relative flex h-2 w-2 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
             </span>
@@ -151,7 +151,7 @@ export default function FeedPage() {
               <p className="text-foreground text-xs font-medium truncate">{src.name}</p>
               <p className="text-muted-foreground/60 text-xs">{src.count}</p>
             </div>
-            <span className={`text-xs px-1.5 py-0.5 rounded ${src.source === "Discord" ? "bg-primary/15 text-primary" : "bg-cyan-500/15 text-cyan-400"}`}>
+            <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${src.source === "Discord" ? "bg-primary/15 text-primary" : "bg-cyan-500/15 text-cyan-400"}`}>
               {src.source}
             </span>
           </div>
@@ -159,37 +159,38 @@ export default function FeedPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 mb-5">
+      <div className="space-y-2 mb-4">
+        {/* Search row */}
         <div className="flex items-center gap-1.5 bg-card border border-border rounded-xl px-3 py-2">
-          <Search size={13} className="text-muted-foreground" />
+          <Search size={13} className="text-muted-foreground shrink-0" />
           <input
             data-testid="input-search"
             type="text"
             placeholder="Search signals..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="bg-transparent text-foreground text-sm placeholder:text-muted-foreground/50 focus:outline-none w-40"
+            className="bg-transparent text-foreground text-sm placeholder:text-muted-foreground/50 focus:outline-none flex-1 min-w-0"
           />
         </div>
-        <div className="flex items-center gap-1.5">
+        {/* Source + tag filters — scrollable on mobile */}
+        <div className="flex items-center gap-1 overflow-x-auto scrollbar-none pb-0.5">
           {SOURCES.map((s) => (
             <button
               key={s}
               data-testid={`button-filter-source-${s.toLowerCase()}`}
               onClick={() => setActiveSource(s)}
-              className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${activeSource === s ? "bg-primary/20 text-primary border border-primary/30" : "text-muted-foreground hover:text-foreground border border-transparent"}`}
+              className={`text-xs px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors shrink-0 ${activeSource === s ? "bg-primary/20 text-primary border border-primary/30" : "text-muted-foreground hover:text-foreground border border-border"}`}
             >
               {s}
             </button>
           ))}
-        </div>
-        <div className="flex items-center gap-1.5 ml-auto flex-wrap">
+          <div className="w-px h-4 bg-border mx-1 shrink-0" />
           {TAGS.map((t) => (
             <button
               key={t}
               data-testid={`button-filter-tag-${t.toLowerCase().replace(" ", "-")}`}
               onClick={() => setActiveTag(t)}
-              className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${activeTag === t ? "bg-white/10 text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              className={`text-xs px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors shrink-0 ${activeTag === t ? "bg-white/10 text-foreground border border-white/20" : "text-muted-foreground hover:text-foreground border border-transparent"}`}
             >
               {t}
             </button>
@@ -205,17 +206,18 @@ export default function FeedPage() {
             data-testid={`card-feed-item-${item.id}`}
             className="bg-card border border-border hover:border-border/80 rounded-2xl p-4 transition-all group"
           >
-            <div className="flex items-center gap-2 mb-2">
-              <span className={`text-xs px-2 py-0.5 rounded-md font-medium ${item.source === "Discord" ? "bg-primary/15 text-primary" : "bg-cyan-500/15 text-cyan-400"}`}>
+            <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+              <span className={`text-xs px-2 py-0.5 rounded-md font-medium shrink-0 ${item.source === "Discord" ? "bg-primary/15 text-primary" : "bg-cyan-500/15 text-cyan-400"}`}>
                 {item.source}
               </span>
-              <span className="text-muted-foreground/60 text-xs">{item.server}</span>
-              <span className="text-xs px-2 py-0.5 rounded-md bg-background text-muted-foreground ml-1">{item.tag}</span>
-              {item.hot && <span className="text-xs text-orange-400">🔥</span>}
-              <span className="text-muted-foreground/50 text-xs ml-auto">{item.time}</span>
+              <span className="text-muted-foreground/60 text-xs truncate max-w-[140px] sm:max-w-none">{item.server}</span>
+              <span className="text-xs px-2 py-0.5 rounded-md bg-background text-muted-foreground shrink-0">{item.tag}</span>
+              {item.hot && <span className="text-xs text-orange-400 shrink-0">🔥</span>}
+              <span className="text-muted-foreground/50 text-xs ml-auto shrink-0">{item.time}</span>
             </div>
             <p className="text-muted-foreground text-sm leading-relaxed">{item.msg}</p>
-            <div className="flex items-center gap-2 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
+            {/* On mobile always show actions; on desktop show on hover */}
+            <div className="flex items-center gap-2 mt-3 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
               <button
                 data-testid={`button-draft-from-${item.id}`}
                 className="text-xs text-primary hover:text-primary/80 flex items-center gap-1 transition-colors"
