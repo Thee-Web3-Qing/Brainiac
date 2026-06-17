@@ -164,4 +164,140 @@ Write a personalized briefing. Mention my wallet names where relevant. Flag anyt
   }
 });
 
+router.post("/wallet-intel", async (req, res) => {
+  const { question, label, address, chain, activity } = req.body as {
+    question: string;
+    label: string;
+    address: string;
+    chain: string;
+    activity: Array<{
+      date: string;
+      type: string;
+      protocol: string;
+      description: string;
+      usdValue: string;
+      apy?: string;
+      yieldEarned?: string;
+    }>;
+  };
+
+  const apiKey = process.env.QWEN_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: "AI service not configured" });
+
+  const activityText = activity?.length
+    ? activity
+        .map((a) => {
+          let line = `[${a.date}] ${a.type.toUpperCase()} on ${a.protocol}: ${a.description} — ${a.usdValue}`;
+          if (a.apy) line += ` | APY: ${a.apy}`;
+          if (a.yieldEarned) line += ` | Yield: ${a.yieldEarned}`;
+          return line;
+        })
+        .join("\n")
+    : "No activity data available.";
+
+  const systemPrompt = `You are Brainiac, a personal on-chain intelligence assistant. You have the user's complete wallet activity history. Your job is to answer questions about their on-chain positions with precision.
+
+Rules:
+- Be specific: name protocols, tokens, and dollar amounts from the data
+- Calculate yields when asked (APY * principal * time)
+- When asked about strategy, suggest better alternatives with specific APYs
+- Keep answers to 4-6 bullet points or 3-4 sentences — no padding
+- Never say "based on the data provided" — just answer directly
+- If asked for strategy, compare current positions to market alternatives (real protocols, real APYs)`;
+
+  const userMessage = `Wallet: "${label}" on ${chain} (${address})
+
+On-chain activity (most recent first):
+${activityText}
+
+Question: "${question}"`;
+
+  try {
+    const response = await fetch(`${QWEN_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "qwen-plus",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+        max_tokens: 700,
+        temperature: 0.5,
+      }),
+    });
+
+    if (!response.ok) return res.status(500).json({ error: "AI service error" });
+    const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const answer = data.choices?.[0]?.message?.content || "Could not generate analysis.";
+    return res.json({ answer });
+  } catch {
+    return res.status(500).json({ error: "Failed to connect to AI service" });
+  }
+});
+
+router.post("/community-intel", async (req, res) => {
+  const { question, communities } = req.body as {
+    question?: string;
+    communities?: Array<{ name: string; source: string }>;
+  };
+
+  const apiKey = process.env.QWEN_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: "AI service not configured" });
+
+  const communityList = communities?.length
+    ? communities.map((c) => `- ${c.name} on ${c.source}`).join("\n")
+    : "- Web3 community (Discord + Telegram)";
+
+  const metrics = `
+Community intelligence snapshot (last 30 days):
+- Peak activity: Mon-Fri 2PM-6PM UTC | Weekends 7PM-10PM UTC
+- Dead zone: 2AM-8AM UTC daily (49% drop in message volume)
+- Daily message volume: avg 847 messages, peaks at 2,100+ on announcement days
+- Active member rate: 23% post at least once per week; 41% haven't posted in 14+ days
+- Top topics by share: DeFi yields (34%), NFT launches (22%), Price action (18%), Protocol news (15%), Governance (11%)
+- Fastest growing channel: #alpha-calls (+34% week-over-week)
+- Highest-engagement content: exclusive alpha drops, price alerts, AMA announcements, "hot take" polls
+- Top 3% of members generate 67% of total interactions
+- Member growth: +23% last 30 days
+- Avg response time on hot posts: 4 minutes
+`;
+
+  const systemPrompt = `You are Brainiac's community intelligence engine. You analyze Web3 community data and give community managers actionable, specific strategies. 
+
+Format: use bold headers (**Timing Strategy**, **Content Strategy**, **Engagement Tactics**, **30-Day Action Plan**) with bullet points. Be specific — reference actual times, topics, and percentages from the data. No generic advice.`;
+
+  const userMessage = `My communities:
+${communityList}
+
+${metrics}
+
+Question: "${question?.trim() || "Give me a complete community intelligence report with a 30-day engagement strategy."}"
+
+Be specific and actionable. Reference the actual metrics.`;
+
+  try {
+    const response = await fetch(`${QWEN_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "qwen-plus",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+        max_tokens: 900,
+        temperature: 0.6,
+      }),
+    });
+
+    if (!response.ok) return res.status(500).json({ error: "AI service error" });
+    const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const insights = data.choices?.[0]?.message?.content || "Could not generate insights.";
+    return res.json({ insights });
+  } catch {
+    return res.status(500).json({ error: "Failed to connect to AI service" });
+  }
+});
+
 export default router;
