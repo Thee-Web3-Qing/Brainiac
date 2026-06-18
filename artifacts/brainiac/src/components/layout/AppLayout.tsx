@@ -2,7 +2,7 @@ import { useState, ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { Brain, LayoutDashboard, Zap, Wallet, MessageSquare, ChevronRight, Settings, X, CreditCard, LogOut, LogIn, Check, Plus, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { usePrivy, useWallets, useLinkWithOAuth } from "@privy-io/react-auth";
+import { usePrivy, useWallets, useLinkWithOAuth, useConnectWallet } from "@privy-io/react-auth";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -93,10 +93,14 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   const { ready, authenticated, user, login, logout } = usePrivy();
   const { wallets } = useWallets();
-  const { initOAuth } = useLinkWithOAuth();
+  const { initOAuth, loading: oauthLinking } = useLinkWithOAuth();
+  const { connectWallet } = useConnectWallet();
 
-  const hasGoogle = !!user?.google;
-  const hasTwitter = !!user?.twitter;
+  // Use linkedAccounts array as the source of truth — more reliable than user.google/twitter shorthand
+  const hasGoogle = user?.linkedAccounts?.some((a) => a.type === "google_oauth") ?? false;
+  const hasTwitter = user?.linkedAccounts?.some((a) => a.type === "twitter_oauth") ?? false;
+  const googleAccount = user?.linkedAccounts?.find((a) => a.type === "google_oauth") as { email?: string } | undefined;
+  const twitterAccount = user?.linkedAccounts?.find((a) => a.type === "twitter_oauth") as { username?: string } | undefined;
 
   async function handleLinkGoogle() {
     setLinkingGoogle(true);
@@ -265,16 +269,30 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                   </div>
                 </div>
 
-                {wallets.length > 0 && (
-                  <div className="bg-background rounded-xl border border-border p-3 mb-3">
-                    <p className="text-xs text-muted-foreground mb-2">Connected wallet</p>
-                    {wallets.map((w) => (
-                      <p key={w.address} className="text-xs font-mono text-foreground truncate">
-                        {shortAddr(w.address)}
-                      </p>
-                    ))}
+                <div className="bg-background rounded-xl border border-border p-3 mb-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-muted-foreground">Wallets</p>
+                    <button
+                      onClick={() => connectWallet()}
+                      className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 font-medium"
+                    >
+                      <Plus className="w-3 h-3" /> Add wallet
+                    </button>
                   </div>
-                )}
+                  {wallets.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {wallets.map((w) => (
+                        <div key={w.address} className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                          <p className="text-xs font-mono text-foreground truncate">{shortAddr(w.address)}</p>
+                          <span className="text-[10px] text-muted-foreground/60 shrink-0 capitalize">{w.chainType}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground/60">No wallets connected</p>
+                  )}
+                </div>
 
                 <div className="bg-background rounded-xl border border-border p-3">
                   <div className="flex items-center justify-between mb-2">
@@ -299,17 +317,17 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                     icon={<GoogleIcon />}
                     label="Google"
                     linked={hasGoogle}
-                    detail={user?.google?.email}
+                    detail={googleAccount?.email}
                     onLink={handleLinkGoogle}
-                    linking={linkingGoogle}
+                    linking={linkingGoogle || (oauthLinking && linkingGoogle)}
                   />
                   <LinkedAccountRow
                     icon={<XIcon />}
                     label="X / Twitter"
                     linked={hasTwitter}
-                    detail={user?.twitter?.username ? `@${user.twitter.username}` : undefined}
+                    detail={twitterAccount?.username ? `@${twitterAccount.username}` : undefined}
                     onLink={handleLinkTwitter}
-                    linking={linkingTwitter}
+                    linking={linkingTwitter || (oauthLinking && linkingTwitter)}
                   />
                 </div>
               </div>
