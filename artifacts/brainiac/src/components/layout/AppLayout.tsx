@@ -1,8 +1,8 @@
 import { useState, ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Brain, LayoutDashboard, Zap, Wallet, MessageSquare, ChevronRight, Settings, X, CreditCard, LogOut, LogIn } from "lucide-react";
+import { Brain, LayoutDashboard, Zap, Wallet, MessageSquare, ChevronRight, Settings, X, CreditCard, LogOut, LogIn, Check, Plus, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { usePrivy, useWallets, useLinkWithOAuth } from "@privy-io/react-auth";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -26,12 +26,101 @@ function shortAddr(addr: string) {
   return addr.slice(0, 6) + "..." + addr.slice(-4);
 }
 
+const GoogleIcon = () => (
+  <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none">
+    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+  </svg>
+);
+
+const XIcon = () => (
+  <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+  </svg>
+);
+
+function LinkedAccountRow({
+  icon,
+  label,
+  linked,
+  detail,
+  onLink,
+  linking,
+}: {
+  icon: ReactNode;
+  label: string;
+  linked: boolean;
+  detail?: string;
+  onLink?: () => void;
+  linking?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between py-2">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className="w-6 h-6 rounded-md bg-background border border-border flex items-center justify-center shrink-0">
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-foreground">{label}</p>
+          {detail && <p className="text-[10px] text-muted-foreground truncate">{detail}</p>}
+        </div>
+      </div>
+      {linked ? (
+        <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium shrink-0">
+          <Check className="w-3 h-3" /> Linked
+        </span>
+      ) : (
+        <button
+          onClick={onLink}
+          disabled={linking}
+          className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 font-medium shrink-0 disabled:opacity-50"
+        >
+          {linking ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+          Link
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function AppLayout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [linkingGoogle, setLinkingGoogle] = useState(false);
+  const [linkingTwitter, setLinkingTwitter] = useState(false);
 
   const { ready, authenticated, user, login, logout } = usePrivy();
   const { wallets } = useWallets();
+  const { linkWithOAuth } = useLinkWithOAuth({
+    onSuccess: () => {},
+    onError: () => {
+      setLinkingGoogle(false);
+      setLinkingTwitter(false);
+    },
+  });
+
+  const hasGoogle = !!user?.google;
+  const hasTwitter = !!user?.twitter;
+
+  async function handleLinkGoogle() {
+    setLinkingGoogle(true);
+    try {
+      await linkWithOAuth({ type: "google" });
+    } finally {
+      setLinkingGoogle(false);
+    }
+  }
+
+  async function handleLinkTwitter() {
+    setLinkingTwitter(true);
+    try {
+      await linkWithOAuth({ type: "twitter" });
+    } finally {
+      setLinkingTwitter(false);
+    }
+  }
 
   const displayName =
     user?.google?.name ??
@@ -168,51 +257,81 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               </button>
             </div>
 
-            <div className="p-5 border-b border-border">
-              <div className="flex items-center gap-3 mb-4">
-                <Avatar className="w-11 h-11 border border-border shrink-0">
-                  <AvatarImage src={avatarSrc} />
-                  <AvatarFallback className="bg-primary/20 text-primary font-semibold">{initials}</AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <p className="text-foreground font-medium text-sm truncate">{displayName}</p>
-                  <p className="text-muted-foreground text-xs truncate">{displayEmail}</p>
+            <div className="flex-1 overflow-y-auto">
+              {/* Profile header */}
+              <div className="p-5 border-b border-border">
+                <div className="flex items-center gap-3 mb-4">
+                  <Avatar className="w-11 h-11 border border-border shrink-0">
+                    <AvatarImage src={avatarSrc} />
+                    <AvatarFallback className="bg-primary/20 text-primary font-semibold">{initials}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="text-foreground font-medium text-sm truncate">{displayName}</p>
+                    <p className="text-muted-foreground text-xs truncate">{displayEmail}</p>
+                  </div>
+                </div>
+
+                {wallets.length > 0 && (
+                  <div className="bg-background rounded-xl border border-border p-3 mb-3">
+                    <p className="text-xs text-muted-foreground mb-2">Connected wallet</p>
+                    {wallets.map((w) => (
+                      <p key={w.address} className="text-xs font-mono text-foreground truncate">
+                        {shortAddr(w.address)}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
+                <div className="bg-background rounded-xl border border-border p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-muted-foreground">Current plan</span>
+                    <span className="text-xs font-semibold text-foreground">Free</span>
+                  </div>
+                  <div className="h-1.5 bg-border rounded-full overflow-hidden mb-2">
+                    <div className="h-full bg-primary rounded-full" style={{ width: "34%" }} />
+                  </div>
+                  <p className="text-muted-foreground/60 text-xs">5 of 15 AI drafts used this month</p>
                 </div>
               </div>
 
-              {wallets.length > 0 && (
-                <div className="bg-background rounded-xl border border-border p-3 mb-3">
-                  <p className="text-xs text-muted-foreground mb-2">Connected wallet</p>
-                  {wallets.map((w) => (
-                    <p key={w.address} className="text-xs font-mono text-foreground truncate">
-                      {shortAddr(w.address)}
-                    </p>
-                  ))}
+              {/* Connected accounts */}
+              <div className="p-5 border-b border-border">
+                <p className="text-xs text-muted-foreground font-medium mb-1">Connected accounts</p>
+                <p className="text-[10px] text-muted-foreground/60 mb-3">
+                  Link additional sign-in methods so any of them log you into this profile.
+                </p>
+                <div className="divide-y divide-border/50">
+                  <LinkedAccountRow
+                    icon={<GoogleIcon />}
+                    label="Google"
+                    linked={hasGoogle}
+                    detail={user?.google?.email}
+                    onLink={handleLinkGoogle}
+                    linking={linkingGoogle}
+                  />
+                  <LinkedAccountRow
+                    icon={<XIcon />}
+                    label="X / Twitter"
+                    linked={hasTwitter}
+                    detail={user?.twitter?.username ? `@${user.twitter.username}` : undefined}
+                    onLink={handleLinkTwitter}
+                    linking={linkingTwitter}
+                  />
                 </div>
-              )}
+              </div>
 
-              <div className="bg-background rounded-xl border border-border p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-muted-foreground">Current plan</span>
-                  <span className="text-xs font-semibold text-foreground">Free</span>
-                </div>
-                <div className="h-1.5 bg-border rounded-full overflow-hidden mb-2">
-                  <div className="h-full bg-primary rounded-full" style={{ width: "34%" }} />
-                </div>
-                <p className="text-muted-foreground/60 text-xs">5 of 15 AI drafts used this month</p>
+              {/* Actions */}
+              <div className="p-3 space-y-1">
+                <button className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors text-left">
+                  <Settings className="w-4 h-4" /> Settings
+                </button>
+                <button className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-primary hover:bg-primary/10 transition-colors text-left">
+                  <CreditCard className="w-4 h-4" /> Upgrade to Pro
+                </button>
               </div>
             </div>
 
-            <div className="p-3 space-y-1">
-              <button className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors text-left">
-                <Settings className="w-4 h-4" /> Settings
-              </button>
-              <button className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-primary hover:bg-primary/10 transition-colors text-left">
-                <CreditCard className="w-4 h-4" /> Upgrade to Pro
-              </button>
-            </div>
-
-            <div className="mt-auto p-4 border-t border-border">
+            <div className="p-4 border-t border-border">
               <button
                 onClick={() => { logout(); setProfileOpen(false); }}
                 className="flex items-center gap-2 text-muted-foreground/60 hover:text-muted-foreground text-xs transition-colors"
