@@ -1,1 +1,1 @@
-- [0G Newton integration](0g-newton.md) — real on-chain login history via 0G Newton testnet (chainId 16602); server wallet needs A0GI from faucet.
+- [GramJS ESM import fix](gramjs-esm.md) — import StringSession from main `telegram` package's `sessions` export, not `telegram/sessions` directory

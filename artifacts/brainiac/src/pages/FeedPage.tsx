@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Search, RefreshCw, X, MessageSquare, Send, Filter, Check, Copy, ExternalLink, Loader2, ChevronRight } from "lucide-react";
+import { Plus, Search, RefreshCw, X, MessageSquare, Send, Filter, Check, Copy, ExternalLink, Loader2, ChevronRight, Phone, KeyRound } from "lucide-react";
 
 const SOURCES = ["All", "Discord", "Telegram"];
 const TAGS    = ["All", "Alpha", "Whale Alert", "Vote", "Launch", "NFT"];
 
 const LS_DISCORD_AUTH     = "brainiac:discord_auth";
 const LS_DISCORD_CHANNELS = "brainiac:discord_channels";
+const LS_TG_SESSION       = "brainiac:tg_session";
+const LS_TG_CHATS         = "brainiac:tg_chats";
 
 type FeedItem = {
   id: string;
@@ -15,16 +17,6 @@ type FeedItem = {
   time: string;
   tag: string;
   hot: boolean;
-};
-
-type TelegramMessage = {
-  id: string;
-  text: string;
-  from: string;
-  chatId: number;
-  chatTitle: string;
-  chatType: string;
-  date: string;
 };
 
 type DiscordAuth = {
@@ -40,6 +32,8 @@ type DiscordTrackedChannel = {
   guildName: string;
 };
 
+type TgChat = { id: string; title: string };
+
 type ConnectedSource = {
   name: string;
   source: "Discord" | "Telegram";
@@ -47,26 +41,26 @@ type ConnectedSource = {
 };
 
 const MOCK_FEED: FeedItem[] = [
-  { id: "m1", source: "Discord",  server: "Bankless DAO",       msg: "Alpha drop: New DEX launching on Base tomorrow with $200K liquidity incentives. Early LPs get 3x boost. Contract deployed at 14:00 UTC.",  time: "2m ago",  tag: "Alpha",       hot: true  },
-  { id: "m2", source: "Telegram", server: "Crypto Signals Pro", msg: "Whale wallet 0x7f3a moved 500 ETH to Binance 20 mins ago. Watch price action in the next hour. Pattern seen before recent dip.",            time: "11m ago", tag: "Whale Alert", hot: true  },
-  { id: "m3", source: "Discord",  server: "Base Builders",      msg: "Community vote results: Proposal #14 passed with 78% approval. Treasury allocation of 50K USDC confirmed for Q3 grants.",                   time: "34m ago", tag: "Vote",        hot: false },
-  { id: "m4", source: "Telegram", server: "NFT Alpha",          msg: "Floor on Pudgy Penguins up 12% in the last hour. Volume spike on Blur. 340 ETH traded in 60 minutes.",                                      time: "1h ago",  tag: "NFT",         hot: false },
-  { id: "m5", source: "Discord",  server: "DeFi Digest",        msg: "New yield strategy dropping on Arbitrum: 18% APY on stablecoin pairs via Camelot V4. Audited by Certik. Launching Thursday.",               time: "2h ago",  tag: "Alpha",       hot: false },
-  { id: "m6", source: "Telegram", server: "Layer Zero Insiders",msg: "LayerZero airdrop snapshot confirmed. Must have at least 5 cross-chain transactions. Deadline is end of June.",                              time: "3h ago",  tag: "Launch",      hot: true  },
+  { id: "m1", source: "Discord",  server: "Bankless DAO",        msg: "Alpha drop: New DEX launching on Base tomorrow with $200K liquidity incentives. Early LPs get 3x boost.", time: "2m ago",  tag: "Alpha",       hot: true  },
+  { id: "m2", source: "Telegram", server: "Crypto Signals Pro",  msg: "Whale wallet 0x7f3a moved 500 ETH to Binance 20 mins ago. Watch price action in the next hour.",         time: "11m ago", tag: "Whale Alert", hot: true  },
+  { id: "m3", source: "Discord",  server: "Base Builders",       msg: "Proposal #14 passed with 78% approval. Treasury allocation of 50K USDC confirmed for Q3 grants.",       time: "34m ago", tag: "Vote",        hot: false },
+  { id: "m4", source: "Telegram", server: "NFT Alpha",           msg: "Floor on Pudgy Penguins up 12% in the last hour. Volume spike on Blur. 340 ETH traded in 60 minutes.",  time: "1h ago",  tag: "NFT",         hot: false },
+  { id: "m5", source: "Discord",  server: "DeFi Digest",         msg: "New yield strategy dropping on Arbitrum: 18% APY on stablecoin pairs via Camelot V4. Launching Thu.",   time: "2h ago",  tag: "Alpha",       hot: false },
+  { id: "m6", source: "Telegram", server: "Layer Zero Insiders", msg: "LayerZero airdrop snapshot confirmed. Must have 5+ cross-chain transactions. Deadline end of June.",     time: "3h ago",  tag: "Launch",      hot: true  },
 ];
 
-function tagFromText(text: string): string {
-  const t = text.toLowerCase();
-  if (t.includes("whale") || t.includes("moved") || t.includes("binance")) return "Whale Alert";
-  if (t.includes("airdrop") || t.includes("snapshot") || t.includes("launch") || t.includes("mint")) return "Launch";
-  if (t.includes("vote") || t.includes("proposal") || t.includes("governance")) return "Vote";
-  if (t.includes("nft") || t.includes("floor") || t.includes("collection")) return "NFT";
+function tagFromText(t: string): string {
+  const s = t.toLowerCase();
+  if (s.includes("whale") || s.includes("moved") || s.includes("binance")) return "Whale Alert";
+  if (s.includes("airdrop") || s.includes("snapshot") || s.includes("launch") || s.includes("mint")) return "Launch";
+  if (s.includes("vote") || s.includes("proposal") || s.includes("governance")) return "Vote";
+  if (s.includes("nft") || s.includes("floor") || s.includes("collection")) return "NFT";
   return "Alpha";
 }
 
-function isHot(text: string): boolean {
-  const t = text.toLowerCase();
-  return t.includes("whale") || t.includes("urgent") || t.includes("breaking") || t.includes("airdrop") || t.includes("3x");
+function isHot(t: string): boolean {
+  const s = t.toLowerCase();
+  return s.includes("whale") || s.includes("urgent") || s.includes("breaking") || s.includes("airdrop") || s.includes("3x");
 }
 
 function timeAgo(iso: string): string {
@@ -90,23 +84,185 @@ function CopyableCode({ value }: { value: string }) {
   );
 }
 
-function ConnectModal({ onClose, onChannelTracked, onTelegramLinked, discordAuth }: {
+type TgStep = "phone" | "otp" | "dialogs";
+
+function TelegramAuthFlow({ onConnected }: {
+  onConnected: (session: string, chats: TgChat[]) => void;
+}) {
+  const [step, setStep]           = useState<TgStep>("phone");
+  const [phone, setPhone]         = useState("");
+  const [code, setCode]           = useState("");
+  const [sessionId, setSessionId] = useState("");
+  const [tempSession, setTempSession] = useState("");
+  const [dialogs, setDialogs]     = useState<Array<{ id: string; title: string; type: string }>>([]);
+  const [selected, setSelected]   = useState<Set<string>>(new Set());
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+
+  const sendCode = async () => {
+    if (!phone.trim()) return;
+    setLoading(true); setError(null);
+    try {
+      const r = await fetch("/api/telegram/user/auth/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: phone.trim() }),
+      });
+      const d = await r.json() as { sessionId?: string; error?: string };
+      if (!r.ok || d.error) throw new Error(d.error ?? "Failed to send code");
+      setSessionId(d.sessionId!);
+      setStep("otp");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyCode = async () => {
+    if (!code.trim()) return;
+    setLoading(true); setError(null);
+    try {
+      const r = await fetch("/api/telegram/user/auth/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, code: code.trim() }),
+      });
+      const d = await r.json() as { sessionString?: string; needs2FA?: boolean; error?: string };
+      if (d.needs2FA) {
+        setError("This account has 2FA enabled. Brainiac doesn't support 2FA accounts yet.");
+        return;
+      }
+      if (!r.ok || d.error) throw new Error(d.error ?? "Invalid code");
+      setTempSession(d.sessionString!);
+
+      // Immediately fetch dialogs
+      const dr = await fetch("/api/telegram/user/dialogs", {
+        headers: { "x-tg-session": d.sessionString! },
+      });
+      const dd = await dr.json() as { chats?: Array<{ id: string; title: string; type: string }>; error?: string };
+      if (dd.error) throw new Error(dd.error);
+      setDialogs(dd.chats ?? []);
+      setStep("dialogs");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Verification failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleChat = (id: string) => {
+    setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  };
+
+  const trackSelected = () => {
+    const chats = dialogs.filter((d) => selected.has(d.id)).map((d) => ({ id: d.id, title: d.title }));
+    if (chats.length === 0) return;
+    onConnected(tempSession, chats);
+  };
+
+  if (step === "phone") return (
+    <div className="space-y-4">
+      <div className="bg-background rounded-xl border border-border p-4">
+        <p className="text-foreground text-xs font-semibold mb-1">Reads as you — no bot, no admin needed</p>
+        <p className="text-muted-foreground text-xs leading-relaxed">
+          Sign in with your Telegram account. Brainiac reads any group or channel you're already a member of — using your identity, not a bot.
+        </p>
+      </div>
+      <div>
+        <label className="text-muted-foreground text-xs block mb-1.5">Your phone number</label>
+        <div className="flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-2.5 focus-within:border-primary/50 transition-colors">
+          <Phone size={14} className="text-muted-foreground/50 shrink-0" />
+          <input type="tel" placeholder="+1 234 567 8900" value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && sendCode()}
+            className="bg-transparent text-foreground text-sm placeholder:text-muted-foreground/40 focus:outline-none flex-1" />
+        </div>
+        <p className="text-muted-foreground/50 text-xs mt-1">Include country code. Telegram will send you a code.</p>
+      </div>
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+      <button onClick={sendCode} disabled={loading || !phone.trim()}
+        className="w-full py-3 bg-primary hover:bg-primary/90 disabled:opacity-35 disabled:cursor-not-allowed text-primary-foreground rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2">
+        {loading ? <><Loader2 size={14} className="animate-spin" /> Sending...</> : "Send code"}
+      </button>
+    </div>
+  );
+
+  if (step === "otp") return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 px-3 py-3 bg-cyan-500/8 border border-cyan-500/20 rounded-xl">
+        <KeyRound size={16} className="text-cyan-400 shrink-0" />
+        <div>
+          <p className="text-foreground text-xs font-medium">Check your Telegram app</p>
+          <p className="text-muted-foreground/70 text-xs">Telegram sent a login code to {phone}</p>
+        </div>
+      </div>
+      <div>
+        <label className="text-muted-foreground text-xs block mb-1.5">Enter the code</label>
+        <input type="text" inputMode="numeric" placeholder="12345" value={code}
+          onChange={(e) => setCode(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && verifyCode()}
+          maxLength={10}
+          className="w-full bg-background border border-border rounded-xl px-4 py-3 text-foreground text-lg font-mono text-center tracking-widest placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50 transition-colors" />
+      </div>
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+      <button onClick={verifyCode} disabled={loading || !code.trim()}
+        className="w-full py-3 bg-primary hover:bg-primary/90 disabled:opacity-35 disabled:cursor-not-allowed text-primary-foreground rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2">
+        {loading ? <><Loader2 size={14} className="animate-spin" /> Verifying...</> : "Verify"}
+      </button>
+      <button onClick={() => { setStep("phone"); setError(null); setCode(""); }}
+        className="w-full text-muted-foreground text-xs hover:text-foreground transition-colors">
+        Use a different number
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 px-3 py-2 bg-green-500/8 border border-green-500/20 rounded-xl">
+        <Check size={14} className="text-green-400 shrink-0" />
+        <span className="text-green-400 text-xs font-medium">Signed in — {dialogs.length} groups & channels found</span>
+      </div>
+      <p className="text-muted-foreground text-xs">Pick which chats to monitor:</p>
+      <div className="space-y-1 max-h-56 overflow-y-auto">
+        {dialogs.map((d) => (
+          <button key={d.id} onClick={() => toggleChat(d.id)}
+            className={`w-full flex items-center gap-3 text-left text-sm px-3 py-2 rounded-lg transition-colors border ${
+              selected.has(d.id) ? "bg-primary/12 border-primary/30 text-foreground" : "border-transparent text-muted-foreground hover:bg-white/5 hover:text-foreground"
+            }`}>
+            <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${selected.has(d.id) ? "bg-primary border-primary" : "border-border"}`}>
+              {selected.has(d.id) && <Check size={10} className="text-primary-foreground" />}
+            </div>
+            <span className="flex-1 truncate">{d.title}</span>
+            <span className="text-muted-foreground/40 text-xs shrink-0">{d.type}</span>
+          </button>
+        ))}
+        {dialogs.length === 0 && (
+          <p className="text-center py-6 text-muted-foreground text-sm">No groups or channels found.</p>
+        )}
+      </div>
+      <button onClick={trackSelected} disabled={selected.size === 0}
+        className="w-full py-3 bg-primary hover:bg-primary/90 disabled:opacity-35 disabled:cursor-not-allowed text-primary-foreground rounded-xl text-sm font-medium transition-colors">
+        {selected.size > 0 ? `Track ${selected.size} chat${selected.size > 1 ? "s" : ""}` : "Select chats"}
+      </button>
+    </div>
+  );
+}
+
+function ConnectModal({ onClose, onChannelTracked, onTelegramConnected, discordAuth }: {
   onClose: () => void;
   onChannelTracked: (guild: { id: string; name: string }, channels: Array<{ id: string; name: string }>) => void;
-  onTelegramLinked: (groupName: string) => void;
+  onTelegramConnected: (session: string, chats: TgChat[]) => void;
   discordAuth: DiscordAuth | null;
 }) {
-  const [tab, setTab]             = useState<"discord" | "telegram">("discord");
-  const [step, setStep]           = useState<"guild" | "channels">("guild");
+  const [tab, setTab]   = useState<"discord" | "telegram">("discord");
+  const [step, setStep] = useState<"guild" | "channels">("guild");
   const [selectedGuild, setSelectedGuild] = useState<{ id: string; name: string } | null>(null);
   const [guildChannels, setGuildChannels] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedChannelIds, setSelectedChannelIds] = useState<Set<string>>(new Set());
   const [loadingChannels, setLoadingChannels] = useState(false);
   const [channelError, setChannelError] = useState<string | null>(null);
   const [manualChannelId, setManualChannelId] = useState("");
-  const [tgName, setTgName]       = useState("");
-  const [tgDone, setTgDone]       = useState(false);
-  const [tgLoading, setTgLoading] = useState(false);
 
   const handleGuildSelect = async (guild: { id: string; name: string }) => {
     setSelectedGuild(guild);
@@ -130,11 +286,7 @@ function ConnectModal({ onClose, onChannelTracked, onTelegramLinked, discordAuth
   };
 
   const toggleChannel = (id: string) => {
-    setSelectedChannelIds((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+    setSelectedChannelIds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   };
 
   const handleTrackSelected = () => {
@@ -150,16 +302,10 @@ function ConnectModal({ onClose, onChannelTracked, onTelegramLinked, discordAuth
     onClose();
   };
 
-  const handleTelegramDone = () => {
-    if (!tgName.trim()) return;
-    setTgLoading(true);
-    setTimeout(() => { setTgDone(true); onTelegramLinked(tgName.trim()); setTimeout(onClose, 1500); }, 800);
-  };
-
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full max-w-lg animate-slide-up">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+      <div className="bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full max-w-lg animate-slide-up max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             {step === "channels" && tab === "discord" && (
               <button onClick={() => setStep("guild")} className="text-muted-foreground hover:text-foreground transition-colors">
@@ -179,10 +325,9 @@ function ConnectModal({ onClose, onChannelTracked, onTelegramLinked, discordAuth
         </div>
 
         {step === "guild" && (
-          <div className="flex border-b border-border">
+          <div className="flex border-b border-border shrink-0">
             {(["discord", "telegram"] as const).map((t) => (
-              <button key={t} data-testid={`button-tab-${t}`}
-                onClick={() => { setTab(t); }}
+              <button key={t} data-testid={`button-tab-${t}`} onClick={() => setTab(t)}
                 className={`flex-1 py-3 text-sm font-medium transition-colors ${tab === t ? "text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"}`}>
                 {t === "discord" ? "Discord" : "Telegram"}
               </button>
@@ -190,13 +335,13 @@ function ConnectModal({ onClose, onChannelTracked, onTelegramLinked, discordAuth
           </div>
         )}
 
-        <div className="p-5">
+        <div className="p-5 overflow-y-auto">
           {tab === "discord" && step === "guild" && (
             <div className="space-y-3">
               <div className="bg-background rounded-xl border border-border p-4">
                 <p className="text-foreground text-xs font-semibold mb-1">Reads as you — no admin needed</p>
                 <p className="text-muted-foreground text-xs leading-relaxed">
-                  Connect your Discord account. Brainiac reads any channel you already have access to as a regular member — no bot invite, no server permissions required.
+                  Connect your Discord account. Brainiac reads any channel you can already see as a regular member — no bot invite, no server permissions required.
                 </p>
               </div>
               {discordAuth ? (
@@ -237,7 +382,7 @@ function ConnectModal({ onClose, onChannelTracked, onTelegramLinked, discordAuth
                   <div>
                     <p className="text-foreground text-xs font-medium mb-1">Enter channel ID manually</p>
                     <p className="text-muted-foreground/50 text-xs mb-2">Right-click a channel in Discord &rarr; Copy Channel ID (enable Developer Mode in settings)</p>
-                    <input type="text" placeholder="Channel ID (e.g. 1234567890123456789)" value={manualChannelId}
+                    <input type="text" placeholder="Channel ID..." value={manualChannelId}
                       onChange={(e) => setManualChannelId(e.target.value)}
                       className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-foreground text-sm font-mono placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50" />
                   </div>
@@ -253,13 +398,9 @@ function ConnectModal({ onClose, onChannelTracked, onTelegramLinked, discordAuth
                     {guildChannels.map((c) => (
                       <button key={c.id} onClick={() => toggleChannel(c.id)}
                         className={`w-full flex items-center gap-3 text-left text-sm px-3 py-2 rounded-lg transition-colors border ${
-                          selectedChannelIds.has(c.id)
-                            ? "bg-primary/12 border-primary/30 text-foreground"
-                            : "border-transparent text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                          selectedChannelIds.has(c.id) ? "bg-primary/12 border-primary/30 text-foreground" : "border-transparent text-muted-foreground hover:bg-white/5 hover:text-foreground"
                         }`}>
-                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                          selectedChannelIds.has(c.id) ? "bg-primary border-primary" : "border-border"
-                        }`}>
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${selectedChannelIds.has(c.id) ? "bg-primary border-primary" : "border-border"}`}>
                           {selectedChannelIds.has(c.id) && <Check size={10} className="text-primary-foreground" />}
                         </div>
                         <span className="font-mono text-xs"># {c.name}</span>
@@ -268,9 +409,7 @@ function ConnectModal({ onClose, onChannelTracked, onTelegramLinked, discordAuth
                   </div>
                   <button onClick={handleTrackSelected} disabled={selectedChannelIds.size === 0}
                     className="w-full py-3 bg-primary hover:bg-primary/90 disabled:opacity-35 disabled:cursor-not-allowed text-primary-foreground rounded-xl text-sm font-medium transition-colors">
-                    {selectedChannelIds.size > 0
-                      ? `Track ${selectedChannelIds.size} channel${selectedChannelIds.size > 1 ? "s" : ""}`
-                      : "Select channels"}
+                    {selectedChannelIds.size > 0 ? `Track ${selectedChannelIds.size} channel${selectedChannelIds.size > 1 ? "s" : ""}` : "Select channels"}
                   </button>
                 </div>
               )}
@@ -278,47 +417,7 @@ function ConnectModal({ onClose, onChannelTracked, onTelegramLinked, discordAuth
           )}
 
           {tab === "telegram" && (
-            tgDone ? (
-              <div className="py-6 flex flex-col items-center gap-3 text-center">
-                <div className="w-12 h-12 bg-green-500/10 border border-green-500/20 rounded-full flex items-center justify-center">
-                  <Check size={22} className="text-green-400" />
-                </div>
-                <p className="font-display font-semibold text-foreground">Linked</p>
-                <p className="text-muted-foreground text-sm">Brainiac will pick up messages from {tgName}.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="bg-background rounded-xl border border-border p-4">
-                  <p className="text-foreground text-xs font-semibold mb-1">Any group member can do this</p>
-                  <p className="text-muted-foreground text-xs leading-relaxed">
-                    Add the Brainiac bot to any Telegram group you're in. You don't need to be an admin — in most groups, any member can add bots.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-foreground text-xs font-medium">1. Add the bot to your group</p>
-                  <div className="flex gap-2">
-                    <CopyableCode value="@brainiacaibot" />
-                    <a href="https://t.me/brainiacaibot" target="_blank" rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-1.5 shrink-0 px-3 py-2.5 bg-cyan-500/8 hover:bg-cyan-500/15 border border-cyan-500/20 hover:border-cyan-500/35 text-cyan-400 text-xs font-medium rounded-xl transition-all">
-                      Open <ExternalLink size={12} />
-                    </a>
-                  </div>
-                  <p className="text-muted-foreground/50 text-xs">In the group: tap the name → Add Members → search @brainiacaibot</p>
-                </div>
-                <div className="space-y-1.5">
-                  <p className="text-foreground text-xs font-medium">2. Which group did you add it to?</p>
-                  <input data-testid="input-community-name" type="text"
-                    placeholder="e.g. Crypto Alpha, Base Insiders..."
-                    value={tgName} onChange={(e) => setTgName(e.target.value)}
-                    className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-foreground text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50" />
-                </div>
-                <button data-testid="button-connect-confirm" onClick={handleTelegramDone}
-                  disabled={tgLoading || !tgName.trim()}
-                  className="w-full py-3 bg-primary hover:bg-primary/90 disabled:opacity-35 disabled:cursor-not-allowed text-primary-foreground rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2">
-                  {tgLoading ? <><RefreshCw size={14} className="animate-spin" /> Linking...</> : "Done, start tracking"}
-                </button>
-              </div>
-            )
+            <TelegramAuthFlow onConnected={(session, chats) => { onTelegramConnected(session, chats); onClose(); }} />
           )}
         </div>
       </div>
@@ -334,33 +433,32 @@ export default function FeedPage() {
   const [feed, setFeed]                 = useState<FeedItem[]>(MOCK_FEED);
   const [tgLoading, setTgLoading]       = useState(false);
   const [discordLoading, setDiscordLoading] = useState(false);
+  const [connectedSources, setConnectedSources] = useState<ConnectedSource[]>([]);
 
   const [discordAuth, setDiscordAuth] = useState<DiscordAuth | null>(() => {
     try { return JSON.parse(localStorage.getItem(LS_DISCORD_AUTH) ?? "null"); } catch { return null; }
   });
-
-  const [trackedChannels, setTrackedChannels] = useState<DiscordTrackedChannel[]>(() => {
+  const [trackedDiscordChannels, setTrackedDiscordChannels] = useState<DiscordTrackedChannel[]>(() => {
     try { return JSON.parse(localStorage.getItem(LS_DISCORD_CHANNELS) ?? "[]"); } catch { return []; }
   });
-
-  const [connectedSources, setConnectedSources] = useState<ConnectedSource[]>([]);
+  const [tgSession, setTgSession] = useState<string | null>(() => localStorage.getItem(LS_TG_SESSION));
+  const [trackedTgChats, setTrackedTgChats] = useState<TgChat[]>(() => {
+    try { return JSON.parse(localStorage.getItem(LS_TG_CHATS) ?? "[]"); } catch { return []; }
+  });
 
   const mergeItems = (incoming: FeedItem[]) => {
     setFeed((prev) => {
       const ids = new Set(prev.map((f) => f.id));
       const fresh = incoming.filter((i) => !ids.has(i.id));
-      return fresh.length > 0 ? [...fresh, ...prev].slice(0, 100) : prev;
+      return fresh.length > 0 ? [...fresh, ...prev].slice(0, 150) : prev;
     });
   };
 
   const addSource = (name: string, source: "Discord" | "Telegram", count = "live") => {
-    setConnectedSources((prev) => {
-      if (prev.find((s) => s.name === name)) return prev;
-      return [...prev, { name, source, count }];
-    });
+    setConnectedSources((prev) => prev.find((s) => s.name === name) ? prev : [...prev, { name, source, count }]);
   };
 
-  // Restore Discord auth from URL params after OAuth redirect
+  // Restore Discord auth from OAuth redirect
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("discord_connected") === "1") {
@@ -376,71 +474,83 @@ export default function FeedPage() {
     }
   }, []);
 
-  // Persist Discord auth whenever it changes
   useEffect(() => {
     if (discordAuth) localStorage.setItem(LS_DISCORD_AUTH, JSON.stringify(discordAuth));
     else localStorage.removeItem(LS_DISCORD_AUTH);
   }, [discordAuth]);
 
-  // Persist tracked channels whenever they change
   useEffect(() => {
-    localStorage.setItem(LS_DISCORD_CHANNELS, JSON.stringify(trackedChannels));
-    trackedChannels.forEach((ch) => addSource(ch.guildName, "Discord", "live"));
-  }, [trackedChannels]);
+    localStorage.setItem(LS_DISCORD_CHANNELS, JSON.stringify(trackedDiscordChannels));
+    trackedDiscordChannels.forEach((ch) => addSource(ch.guildName, "Discord", "live"));
+  }, [trackedDiscordChannels]);
 
-  // Poll Telegram updates
-  const fetchTelegramUpdates = useCallback(async () => {
+  useEffect(() => {
+    if (tgSession) localStorage.setItem(LS_TG_SESSION, tgSession);
+    else localStorage.removeItem(LS_TG_SESSION);
+  }, [tgSession]);
+
+  useEffect(() => {
+    localStorage.setItem(LS_TG_CHATS, JSON.stringify(trackedTgChats));
+    trackedTgChats.forEach((c) => addSource(c.title, "Telegram", "live"));
+  }, [trackedTgChats]);
+
+  // Poll Telegram via user session
+  const fetchUserTgMessages = useCallback(async () => {
+    if (!tgSession || trackedTgChats.length === 0) return;
     setTgLoading(true);
     try {
-      const res = await fetch("/api/telegram/updates?limit=30");
-      const data = await res.json() as { messages?: TelegramMessage[]; error?: string };
-      if (data.error || !data.messages?.length) return;
-
-      const items: FeedItem[] = data.messages.map((m) => ({
-        id: `tg-${m.id}`,
-        source: "Telegram" as const,
-        server: m.chatTitle || "Telegram",
-        msg: m.text,
-        time: timeAgo(m.date),
-        tag: tagFromText(m.text),
-        hot: isHot(m.text),
-      }));
-
-      mergeItems(items);
-      const chats = [...new Set(items.map((m) => m.server))];
-      chats.forEach((c) => addSource(c, "Telegram", `${items.filter((i) => i.server === c).length} today`));
+      const allItems: FeedItem[] = [];
+      await Promise.allSettled(
+        trackedTgChats.map(async (chat) => {
+          const r = await fetch(`/api/telegram/user/messages/${chat.id}?limit=20`, {
+            headers: { "x-tg-session": tgSession },
+          });
+          if (!r.ok) return;
+          const data = await r.json() as { messages?: Array<{ id: string; text: string; date: string }> };
+          (data.messages ?? []).filter((m) => m.text.trim().length > 0).forEach((m) => {
+            allItems.push({
+              id: `tgu-${chat.id}-${m.id}`,
+              source: "Telegram",
+              server: chat.title,
+              msg: m.text,
+              time: timeAgo(m.date),
+              tag: tagFromText(m.text),
+              hot: isHot(m.text),
+            });
+          });
+        })
+      );
+      if (allItems.length > 0) mergeItems(allItems);
     } catch {
     } finally {
       setTgLoading(false);
     }
-  }, []);
+  }, [tgSession, trackedTgChats]);
 
-  // Poll Discord channels using the user's own token
+  // Poll Discord via user token
   const fetchDiscordMessages = useCallback(async () => {
-    if (!discordAuth || trackedChannels.length === 0) return;
+    if (!discordAuth || trackedDiscordChannels.length === 0) return;
     setDiscordLoading(true);
     try {
       const allItems: FeedItem[] = [];
       await Promise.allSettled(
-        trackedChannels.map(async (ch) => {
+        trackedDiscordChannels.map(async (ch) => {
           const r = await fetch(`/api/discord/messages/${ch.guildId}/${ch.channelId}?limit=20`, {
             headers: { "x-discord-token": discordAuth.accessToken },
           });
           if (!r.ok) return;
           const data = await r.json() as { messages?: Array<{ id: string; content: string; author: string; timestamp: string }> };
-          (data.messages ?? [])
-            .filter((m) => m.content.trim().length > 0)
-            .forEach((m) => {
-              allItems.push({
-                id: `dc-${m.id}`,
-                source: "Discord",
-                server: ch.guildName,
-                msg: m.content,
-                time: timeAgo(m.timestamp),
-                tag: tagFromText(m.content),
-                hot: isHot(m.content),
-              });
+          (data.messages ?? []).filter((m) => m.content.trim().length > 0).forEach((m) => {
+            allItems.push({
+              id: `dc-${m.id}`,
+              source: "Discord",
+              server: ch.guildName,
+              msg: m.content,
+              time: timeAgo(m.timestamp),
+              tag: tagFromText(m.content),
+              hot: isHot(m.content),
             });
+          });
         })
       );
       if (allItems.length > 0) mergeItems(allItems);
@@ -448,33 +558,42 @@ export default function FeedPage() {
     } finally {
       setDiscordLoading(false);
     }
-  }, [discordAuth, trackedChannels]);
+  }, [discordAuth, trackedDiscordChannels]);
 
   useEffect(() => {
-    fetchTelegramUpdates();
-    const interval = setInterval(fetchTelegramUpdates, 30_000);
-    return () => clearInterval(interval);
-  }, [fetchTelegramUpdates]);
+    fetchUserTgMessages();
+    const iv = setInterval(fetchUserTgMessages, 60_000);
+    return () => clearInterval(iv);
+  }, [fetchUserTgMessages]);
 
   useEffect(() => {
-    if (trackedChannels.length === 0) return;
+    if (trackedDiscordChannels.length === 0) return;
     fetchDiscordMessages();
-    const interval = setInterval(fetchDiscordMessages, 60_000);
-    return () => clearInterval(interval);
-  }, [fetchDiscordMessages, trackedChannels.length]);
+    const iv = setInterval(fetchDiscordMessages, 60_000);
+    return () => clearInterval(iv);
+  }, [fetchDiscordMessages, trackedDiscordChannels.length]);
 
   const handleChannelTracked = (guild: { id: string; name: string }, channels: Array<{ id: string; name: string }>) => {
-    setTrackedChannels((prev) => {
-      const existingIds = new Set(prev.map((c) => c.channelId));
-      const fresh = channels
-        .filter((c) => !existingIds.has(c.id))
-        .map((c) => ({ channelId: c.id, channelName: c.name, guildId: guild.id, guildName: guild.name }));
-      return [...prev, ...fresh];
+    setTrackedDiscordChannels((prev) => {
+      const ids = new Set(prev.map((c) => c.channelId));
+      return [...prev, ...channels.filter((c) => !ids.has(c.id)).map((c) => ({
+        channelId: c.id, channelName: c.name, guildId: guild.id, guildName: guild.name,
+      }))];
     });
   };
 
-  const handleTelegramLinked = (groupName: string) => {
-    addSource(groupName, "Telegram", "live");
+  const handleTelegramConnected = (session: string, chats: TgChat[]) => {
+    setTgSession(session);
+    setTrackedTgChats((prev) => {
+      const ids = new Set(prev.map((c) => c.id));
+      return [...prev, ...chats.filter((c) => !ids.has(c.id))];
+    });
+  };
+
+  const disconnectTelegram = () => {
+    setTgSession(null); setTrackedTgChats([]);
+    localStorage.removeItem(LS_TG_SESSION); localStorage.removeItem(LS_TG_CHATS);
+    setConnectedSources((prev) => prev.filter((s) => s.source !== "Telegram"));
   };
 
   const isLoading = tgLoading || discordLoading;
@@ -492,7 +611,7 @@ export default function FeedPage() {
         <ConnectModal
           onClose={() => setShowModal(false)}
           onChannelTracked={handleChannelTracked}
-          onTelegramLinked={handleTelegramLinked}
+          onTelegramConnected={handleTelegramConnected}
           discordAuth={discordAuth}
         />
       )}
@@ -503,8 +622,7 @@ export default function FeedPage() {
           <p className="text-muted-foreground text-sm mt-0.5 hidden sm:block">Signal from your communities, filtered by AI</p>
         </div>
         <div className="flex items-center gap-2">
-          <button data-testid="button-refresh"
-            onClick={() => { fetchTelegramUpdates(); fetchDiscordMessages(); }}
+          <button data-testid="button-refresh" onClick={() => { fetchUserTgMessages(); fetchDiscordMessages(); }}
             className="w-9 h-9 bg-card border border-border rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
             {isLoading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
           </button>
@@ -515,16 +633,31 @@ export default function FeedPage() {
         </div>
       </div>
 
+      {/* Status banners */}
       {discordAuth && (
-        <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-green-500/8 border border-green-500/20 rounded-xl">
+        <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-green-500/8 border border-green-500/20 rounded-xl">
           <Check size={13} className="text-green-400 shrink-0" />
           <span className="text-green-400 text-xs">
-            Discord connected as <span className="font-medium">{discordAuth.user.displayName}</span>
-            {trackedChannels.length > 0
-              ? ` — tracking ${trackedChannels.length} channel${trackedChannels.length > 1 ? "s" : ""} as you`
+            Discord: <span className="font-medium">{discordAuth.user.displayName}</span>
+            {trackedDiscordChannels.length > 0
+              ? ` — ${trackedDiscordChannels.length} channel${trackedDiscordChannels.length > 1 ? "s" : ""} tracked`
               : " — click Connect to pick channels"}
           </span>
-          <button onClick={() => { setDiscordAuth(null); setTrackedChannels([]); localStorage.removeItem(LS_DISCORD_AUTH); localStorage.removeItem(LS_DISCORD_CHANNELS); }}
+          <button onClick={() => { setDiscordAuth(null); setTrackedDiscordChannels([]); localStorage.removeItem(LS_DISCORD_AUTH); localStorage.removeItem(LS_DISCORD_CHANNELS); setConnectedSources((p) => p.filter((s) => s.source !== "Discord")); }}
+            className="ml-auto text-muted-foreground/50 hover:text-muted-foreground transition-colors text-xs">
+            Disconnect
+          </button>
+        </div>
+      )}
+
+      {tgSession && (
+        <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-cyan-500/8 border border-cyan-500/20 rounded-xl">
+          <Check size={13} className="text-cyan-400 shrink-0" />
+          <span className="text-cyan-400 text-xs">
+            Telegram: reading as you
+            {trackedTgChats.length > 0 && ` — ${trackedTgChats.length} chat${trackedTgChats.length > 1 ? "s" : ""}`}
+          </span>
+          <button onClick={disconnectTelegram}
             className="ml-auto text-muted-foreground/50 hover:text-muted-foreground transition-colors text-xs">
             Disconnect
           </button>
@@ -552,7 +685,7 @@ export default function FeedPage() {
         </div>
       )}
 
-      {connectedSources.length === 0 && !discordAuth && (
+      {connectedSources.length === 0 && !discordAuth && !tgSession && (
         <div className="mb-5 px-4 py-4 bg-card border border-dashed border-border rounded-xl text-center">
           <p className="text-muted-foreground text-sm">No sources connected yet.</p>
           <p className="text-muted-foreground/60 text-xs mt-0.5">Connect Discord or Telegram to see real signals — showing demo feed below.</p>
@@ -616,8 +749,7 @@ export default function FeedPage() {
               <Filter size={20} className="text-muted-foreground/40" />
             </div>
             <p className="text-muted-foreground text-sm">No signals match your filters.</p>
-            <button data-testid="button-clear-filters"
-              onClick={() => { setActiveSource("All"); setActiveTag("All"); setSearch(""); }}
+            <button data-testid="button-clear-filters" onClick={() => { setActiveSource("All"); setActiveTag("All"); setSearch(""); }}
               className="text-primary text-xs mt-1 hover:text-primary/80 transition-colors">
               Clear filters
             </button>

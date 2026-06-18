@@ -96,6 +96,8 @@ async function buildAll() {
       "wrangler",
       "zeromq",
       "zeromq-prebuilt",
+      "telegram",
+      "telegram/*",
       "playwright",
       "puppeteer",
       "puppeteer-core",
