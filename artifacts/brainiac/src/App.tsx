@@ -14,7 +14,9 @@ import AppLayout from "@/components/layout/AppLayout";
 
 const queryClient = new QueryClient();
 
-const PRIVY_APP_ID = import.meta.env.VITE_PRIVY_APP_ID as string;
+const PRIVY_APP_ID =
+  (import.meta.env.VITE_PRIVY_APP_ID as string | undefined) ||
+  "cmqird7xu001q0clehy0nua8b";
 
 function Router() {
   return (
@@ -46,7 +48,7 @@ function App() {
     <PrivyProvider
       appId={PRIVY_APP_ID}
       config={{
-        loginMethods: ["email", "google", "twitter", "wallet"],
+        loginMethods: ["email", "wallet"],
         appearance: {
           theme: "dark",
           accentColor: "#6366f1",
