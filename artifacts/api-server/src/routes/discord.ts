@@ -68,7 +68,7 @@ router.get("/callback", async (req, res) => {
       accessToken: tokens.access_token,
     }));
 
-    return res.redirect(`/?discord_connected=1&payload=${payload}`);
+    return res.redirect(`/feed?discord_connected=1&payload=${payload}`);
   } catch (err) {
     return res.status(500).send("OAuth failed");
   }
@@ -87,6 +87,33 @@ router.get("/guilds", async (req, res) => {
     return res.json({ guilds: guilds.slice(0, 50).map((g) => ({ id: g.id, name: g.name })) });
   } catch {
     return res.status(500).json({ error: "Failed to fetch guilds" });
+  }
+});
+
+router.get("/channels/:guildId", async (req, res) => {
+  const accessToken = req.headers["x-discord-token"] as string | undefined;
+  if (!accessToken) return res.status(401).json({ error: "Missing access token" });
+
+  const { guildId } = req.params;
+
+  try {
+    const r = await fetch(`${DISCORD_API}/guilds/${guildId}/channels`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!r.ok) {
+      return res.status(r.status).json({ error: "Cannot list channels — try entering the channel ID manually" });
+    }
+
+    const raw = await r.json() as Array<{ id: string; name: string; type: number; position: number }>;
+    const channels = raw
+      .filter((c) => c.type === 0 || c.type === 5)
+      .sort((a, b) => a.position - b.position)
+      .map((c) => ({ id: c.id, name: c.name }));
+
+    return res.json({ channels });
+  } catch {
+    return res.status(500).json({ error: "Failed to fetch channels" });
   }
 });
 

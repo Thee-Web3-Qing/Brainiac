@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Search, RefreshCw, X, MessageSquare, Send, Filter, Check, Copy, ExternalLink, Loader2 } from "lucide-react";
+import { Plus, Search, RefreshCw, X, MessageSquare, Send, Filter, Check, Copy, ExternalLink, Loader2, ChevronRight } from "lucide-react";
 
 const SOURCES = ["All", "Discord", "Telegram"];
 const TAGS    = ["All", "Alpha", "Whale Alert", "Vote", "Launch", "NFT"];
+
+const LS_DISCORD_AUTH     = "brainiac:discord_auth";
+const LS_DISCORD_CHANNELS = "brainiac:discord_channels";
 
 type FeedItem = {
   id: string;
@@ -24,28 +27,46 @@ type TelegramMessage = {
   date: string;
 };
 
+type DiscordAuth = {
+  user: { id: string; username: string; displayName: string };
+  guilds: Array<{ id: string; name: string }>;
+  accessToken: string;
+};
+
+type DiscordTrackedChannel = {
+  channelId: string;
+  channelName: string;
+  guildId: string;
+  guildName: string;
+};
+
+type ConnectedSource = {
+  name: string;
+  source: "Discord" | "Telegram";
+  count: string;
+};
+
 const MOCK_FEED: FeedItem[] = [
-  { id: "m1", source: "Discord",  server: "Bankless DAO",        msg: "Alpha drop: New DEX launching on Base tomorrow with $200K liquidity incentives. Early LPs get 3x boost. Contract will be deployed at 14:00 UTC.", time: "2m ago",  tag: "Alpha",       hot: true  },
-  { id: "m2", source: "Telegram", server: "Crypto Signals Pro",  msg: "Whale wallet 0x7f3a moved 500 ETH to Binance 20 mins ago. Keep watch on price action in the next hour. Pattern seen before recent dip.",           time: "11m ago", tag: "Whale Alert", hot: true  },
-  { id: "m3", source: "Discord",  server: "Base Builders",        msg: "Community vote results are in: Proposal #14 passed with 78% approval. Treasury allocation of 50K USDC confirmed for Q3 grants.",                  time: "34m ago", tag: "Vote",        hot: false },
-  { id: "m4", source: "Telegram", server: "NFT Alpha",            msg: "Floor on Pudgy Penguins up 12% in the last hour. Volume spike on Blur. 340 ETH traded in 60 minutes.",                                              time: "1h ago",  tag: "NFT",         hot: false },
-  { id: "m5", source: "Discord",  server: "DeFi Digest",          msg: "New yield strategy dropping on Arbitrum: 18% APY on stablecoin pairs via Camelot V4. Audited by Certik. Launching Thursday.",                      time: "2h ago",  tag: "Alpha",       hot: false },
-  { id: "m6", source: "Telegram", server: "Layer Zero Insiders",  msg: "LayerZero airdrop snapshot confirmed. Must have at least 5 cross-chain transactions. Deadline is end of June.",                                     time: "3h ago",  tag: "Launch",      hot: true  },
+  { id: "m1", source: "Discord",  server: "Bankless DAO",       msg: "Alpha drop: New DEX launching on Base tomorrow with $200K liquidity incentives. Early LPs get 3x boost. Contract deployed at 14:00 UTC.",  time: "2m ago",  tag: "Alpha",       hot: true  },
+  { id: "m2", source: "Telegram", server: "Crypto Signals Pro", msg: "Whale wallet 0x7f3a moved 500 ETH to Binance 20 mins ago. Watch price action in the next hour. Pattern seen before recent dip.",            time: "11m ago", tag: "Whale Alert", hot: true  },
+  { id: "m3", source: "Discord",  server: "Base Builders",      msg: "Community vote results: Proposal #14 passed with 78% approval. Treasury allocation of 50K USDC confirmed for Q3 grants.",                   time: "34m ago", tag: "Vote",        hot: false },
+  { id: "m4", source: "Telegram", server: "NFT Alpha",          msg: "Floor on Pudgy Penguins up 12% in the last hour. Volume spike on Blur. 340 ETH traded in 60 minutes.",                                      time: "1h ago",  tag: "NFT",         hot: false },
+  { id: "m5", source: "Discord",  server: "DeFi Digest",        msg: "New yield strategy dropping on Arbitrum: 18% APY on stablecoin pairs via Camelot V4. Audited by Certik. Launching Thursday.",               time: "2h ago",  tag: "Alpha",       hot: false },
+  { id: "m6", source: "Telegram", server: "Layer Zero Insiders",msg: "LayerZero airdrop snapshot confirmed. Must have at least 5 cross-chain transactions. Deadline is end of June.",                              time: "3h ago",  tag: "Launch",      hot: true  },
 ];
 
 function tagFromText(text: string): string {
   const t = text.toLowerCase();
-  if (t.includes("whale") || t.includes("eth to binance") || t.includes("moved")) return "Whale Alert";
+  if (t.includes("whale") || t.includes("moved") || t.includes("binance")) return "Whale Alert";
   if (t.includes("airdrop") || t.includes("snapshot") || t.includes("launch") || t.includes("mint")) return "Launch";
   if (t.includes("vote") || t.includes("proposal") || t.includes("governance")) return "Vote";
-  if (t.includes("nft") || t.includes("floor") || t.includes("mint") || t.includes("collection")) return "NFT";
-  if (t.includes("apy") || t.includes("yield") || t.includes("alpha") || t.includes("dex") || t.includes("liquidity")) return "Alpha";
+  if (t.includes("nft") || t.includes("floor") || t.includes("collection")) return "NFT";
   return "Alpha";
 }
 
 function isHot(text: string): boolean {
   const t = text.toLowerCase();
-  return t.includes("whale") || t.includes("urgent") || t.includes("breaking") || t.includes("airdrop") || t.includes("snapshot") || t.includes("3x");
+  return t.includes("whale") || t.includes("urgent") || t.includes("breaking") || t.includes("airdrop") || t.includes("3x");
 }
 
 function timeAgo(iso: string): string {
@@ -55,19 +76,6 @@ function timeAgo(iso: string): string {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return `${Math.floor(diff / 86400)}d ago`;
 }
-
-type ConnectedSource = {
-  name: string;
-  source: "Discord" | "Telegram";
-  chatId?: number;
-  count: string;
-};
-
-type DiscordAuth = {
-  user: { id: string; username: string; displayName: string };
-  guilds: Array<{ id: string; name: string }>;
-  accessToken: string;
-};
 
 function CopyableCode({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
@@ -82,125 +90,212 @@ function CopyableCode({ value }: { value: string }) {
   );
 }
 
-function ConnectModal({ onClose, onConnected, discordAuth }: {
+function ConnectModal({ onClose, onChannelTracked, onTelegramLinked, discordAuth }: {
   onClose: () => void;
-  onConnected: (src: ConnectedSource) => void;
+  onChannelTracked: (guild: { id: string; name: string }, channels: Array<{ id: string; name: string }>) => void;
+  onTelegramLinked: (groupName: string) => void;
   discordAuth: DiscordAuth | null;
 }) {
   const [tab, setTab]             = useState<"discord" | "telegram">("discord");
-  const [name, setName]           = useState("");
-  const [connecting, setConnecting] = useState(false);
-  const [connected, setConnected] = useState(false);
-  const [selectedGuild, setSelectedGuild] = useState("");
+  const [step, setStep]           = useState<"guild" | "channels">("guild");
+  const [selectedGuild, setSelectedGuild] = useState<{ id: string; name: string } | null>(null);
+  const [guildChannels, setGuildChannels] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedChannelIds, setSelectedChannelIds] = useState<Set<string>>(new Set());
+  const [loadingChannels, setLoadingChannels] = useState(false);
+  const [channelError, setChannelError] = useState<string | null>(null);
+  const [manualChannelId, setManualChannelId] = useState("");
+  const [tgName, setTgName]       = useState("");
+  const [tgDone, setTgDone]       = useState(false);
+  const [tgLoading, setTgLoading] = useState(false);
 
-  const handleDiscordOAuth = () => {
-    window.location.href = "/api/discord/auth";
+  const handleGuildSelect = async (guild: { id: string; name: string }) => {
+    setSelectedGuild(guild);
+    setStep("channels");
+    setLoadingChannels(true);
+    setChannelError(null);
+    setGuildChannels([]);
+    setSelectedChannelIds(new Set());
+    try {
+      const r = await fetch(`/api/discord/channels/${guild.id}`, {
+        headers: { "x-discord-token": discordAuth!.accessToken },
+      });
+      const data = await r.json() as { channels?: Array<{ id: string; name: string }>; error?: string };
+      if (!r.ok || data.error) setChannelError(data.error ?? "Could not list channels");
+      else setGuildChannels(data.channels ?? []);
+    } catch {
+      setChannelError("Network error — try entering the channel ID manually");
+    } finally {
+      setLoadingChannels(false);
+    }
   };
 
-  const handleConnect = () => {
-    if (!name.trim()) return;
-    setConnecting(true);
-    setTimeout(() => {
-      setConnected(true);
-      onConnected({ name: name.trim(), source: tab === "discord" ? "Discord" : "Telegram", count: "0 today" });
-    }, 1200);
-    setTimeout(() => onClose(), 2400);
+  const toggleChannel = (id: string) => {
+    setSelectedChannelIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
   };
 
-  const handleGuildSelect = (guildName: string) => {
-    setSelectedGuild(guildName);
-    setName(guildName);
+  const handleTrackSelected = () => {
+    if (!selectedGuild || selectedChannelIds.size === 0) return;
+    onChannelTracked(selectedGuild, guildChannels.filter((c) => selectedChannelIds.has(c.id)));
+    onClose();
   };
 
-  const canConnect = !connecting && name.trim().length > 0 && (tab === "telegram" || !!discordAuth);
+  const handleManualAdd = () => {
+    if (!selectedGuild || !manualChannelId.trim()) return;
+    const id = manualChannelId.trim();
+    onChannelTracked(selectedGuild, [{ id, name: `channel-${id.slice(-4)}` }]);
+    onClose();
+  };
+
+  const handleTelegramDone = () => {
+    if (!tgName.trim()) return;
+    setTgLoading(true);
+    setTimeout(() => { setTgDone(true); onTelegramLinked(tgName.trim()); setTimeout(onClose, 1500); }, 800);
+  };
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full max-w-lg animate-slide-up">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <div>
-            <h3 className="font-display font-semibold text-foreground">Add a source</h3>
-            <p className="text-muted-foreground text-xs mt-0.5">Brainiac reads from your own accounts</p>
+          <div className="flex items-center gap-2">
+            {step === "channels" && tab === "discord" && (
+              <button onClick={() => setStep("guild")} className="text-muted-foreground hover:text-foreground transition-colors">
+                <ChevronRight size={15} className="rotate-180" />
+              </button>
+            )}
+            <div>
+              <h3 className="font-display font-semibold text-foreground">Add a source</h3>
+              <p className="text-muted-foreground text-xs mt-0.5">
+                {step === "channels" && selectedGuild ? `${selectedGuild.name} — pick channels` : "Reads as you — no admin needed"}
+              </p>
+            </div>
           </div>
           <button data-testid="button-close-modal" onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
             <X size={18} />
           </button>
         </div>
 
-        <div className="flex border-b border-border">
-          {(["discord", "telegram"] as const).map((t) => (
-            <button key={t} data-testid={`button-tab-${t}`}
-              onClick={() => { setTab(t); setName(""); setSelectedGuild(""); }}
-              className={`flex-1 py-3 text-sm font-medium transition-colors ${tab === t ? "text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"}`}>
-              {t === "discord" ? "Discord" : "Telegram"}
-            </button>
-          ))}
-        </div>
-
-        {connected ? (
-          <div className="p-8 flex flex-col items-center gap-3 text-center">
-            <div className="w-12 h-12 bg-green-500/10 border border-green-500/20 rounded-full flex items-center justify-center">
-              <Check size={22} className="text-green-400" />
-            </div>
-            <p className="font-display font-semibold text-foreground">Connected</p>
-            <p className="text-muted-foreground text-sm">Syncing messages from {name}...</p>
+        {step === "guild" && (
+          <div className="flex border-b border-border">
+            {(["discord", "telegram"] as const).map((t) => (
+              <button key={t} data-testid={`button-tab-${t}`}
+                onClick={() => { setTab(t); }}
+                className={`flex-1 py-3 text-sm font-medium transition-colors ${tab === t ? "text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"}`}>
+                {t === "discord" ? "Discord" : "Telegram"}
+              </button>
+            ))}
           </div>
-        ) : (
-          <div className="p-5 space-y-4">
-            {tab === "discord" ? (
-              <div className="space-y-3">
-                <div className="bg-background rounded-xl border border-border p-4">
-                  <p className="text-foreground text-xs font-semibold mb-1">Your account, your servers</p>
-                  <p className="text-muted-foreground text-xs leading-relaxed">
-                    Sign in with Discord. Brainiac reads servers you already have access to, on your behalf. No bot install, no admin required.
-                  </p>
+        )}
+
+        <div className="p-5">
+          {tab === "discord" && step === "guild" && (
+            <div className="space-y-3">
+              <div className="bg-background rounded-xl border border-border p-4">
+                <p className="text-foreground text-xs font-semibold mb-1">Reads as you — no admin needed</p>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  Connect your Discord account. Brainiac reads any channel you already have access to as a regular member — no bot invite, no server permissions required.
+                </p>
+              </div>
+              {discordAuth ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 px-3 py-2.5 bg-green-500/8 border border-green-500/20 rounded-xl">
+                    <Check size={14} className="text-green-400 shrink-0" />
+                    <span className="text-green-400 text-sm">Signed in as {discordAuth.user.displayName}</span>
+                  </div>
+                  <p className="text-muted-foreground text-xs">Pick a server to track:</p>
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {discordAuth.guilds.map((g) => (
+                      <button key={g.id} onClick={() => handleGuildSelect(g)}
+                        className="w-full flex items-center justify-between text-left text-sm px-3 py-2.5 rounded-xl hover:bg-white/5 border border-transparent hover:border-border transition-colors group">
+                        <span className="text-foreground">{g.name}</span>
+                        <ChevronRight size={13} className="text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                      </button>
+                    ))}
+                  </div>
                 </div>
+              ) : (
+                <button data-testid="button-discord-auth" onClick={() => { window.location.href = "/api/discord/auth"; }}
+                  className="flex items-center justify-center gap-2 w-full bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/25 hover:border-[#5865F2]/50 text-[#7b84ff] text-sm font-medium py-3 rounded-xl transition-all">
+                  Sign in with Discord <ExternalLink size={13} />
+                </button>
+              )}
+            </div>
+          )}
 
-                {discordAuth ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 px-3 py-2.5 bg-green-500/8 border border-green-500/20 rounded-xl">
-                      <Check size={14} className="text-green-400 shrink-0" />
-                      <span className="text-green-400 text-sm">Signed in as {discordAuth.user.displayName}</span>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground text-xs mb-2">Pick a server to track</p>
-                      <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                        {discordAuth.guilds.map((g) => (
-                          <button key={g.id}
-                            onClick={() => handleGuildSelect(g.name)}
-                            className={`w-full text-left text-sm px-3 py-2 rounded-lg transition-colors ${selectedGuild === g.name ? "bg-primary/15 text-foreground border border-primary/30" : "text-muted-foreground hover:bg-white/5 border border-transparent"}`}>
-                            {g.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+          {tab === "discord" && step === "channels" && (
+            <div className="space-y-3">
+              {loadingChannels ? (
+                <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground text-sm">
+                  <Loader2 size={15} className="animate-spin" /> Fetching channels...
+                </div>
+              ) : channelError ? (
+                <div className="space-y-3">
+                  <p className="text-muted-foreground/70 text-xs">{channelError}</p>
+                  <div>
+                    <p className="text-foreground text-xs font-medium mb-1">Enter channel ID manually</p>
+                    <p className="text-muted-foreground/50 text-xs mb-2">Right-click a channel in Discord &rarr; Copy Channel ID (enable Developer Mode in settings)</p>
+                    <input type="text" placeholder="Channel ID (e.g. 1234567890123456789)" value={manualChannelId}
+                      onChange={(e) => setManualChannelId(e.target.value)}
+                      className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-foreground text-sm font-mono placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50" />
                   </div>
-                ) : (
-                  <button data-testid="button-discord-auth" onClick={handleDiscordOAuth}
-                    className="flex items-center justify-center gap-2 w-full bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/25 hover:border-[#5865F2]/50 text-[#7b84ff] text-sm font-medium py-3 rounded-xl transition-all">
-                    Sign in with Discord <ExternalLink size={13} />
+                  <button onClick={handleManualAdd} disabled={!manualChannelId.trim()}
+                    className="w-full py-3 bg-primary hover:bg-primary/90 disabled:opacity-35 disabled:cursor-not-allowed text-primary-foreground rounded-xl text-sm font-medium transition-colors">
+                    Track this channel
                   </button>
-                )}
-
-                {discordAuth && !selectedGuild && (
-                  <div className="space-y-1.5">
-                    <p className="text-muted-foreground text-xs">Or type a server name manually</p>
-                    <input data-testid="input-community-name" type="text" placeholder="Server name..."
-                      value={name} onChange={(e) => setName(e.target.value)}
-                      className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-foreground text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50" />
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-muted-foreground text-xs">{guildChannels.length} text channels — select to monitor:</p>
+                  <div className="space-y-1 max-h-52 overflow-y-auto">
+                    {guildChannels.map((c) => (
+                      <button key={c.id} onClick={() => toggleChannel(c.id)}
+                        className={`w-full flex items-center gap-3 text-left text-sm px-3 py-2 rounded-lg transition-colors border ${
+                          selectedChannelIds.has(c.id)
+                            ? "bg-primary/12 border-primary/30 text-foreground"
+                            : "border-transparent text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                        }`}>
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                          selectedChannelIds.has(c.id) ? "bg-primary border-primary" : "border-border"
+                        }`}>
+                          {selectedChannelIds.has(c.id) && <Check size={10} className="text-primary-foreground" />}
+                        </div>
+                        <span className="font-mono text-xs"># {c.name}</span>
+                      </button>
+                    ))}
                   </div>
-                )}
+                  <button onClick={handleTrackSelected} disabled={selectedChannelIds.size === 0}
+                    className="w-full py-3 bg-primary hover:bg-primary/90 disabled:opacity-35 disabled:cursor-not-allowed text-primary-foreground rounded-xl text-sm font-medium transition-colors">
+                    {selectedChannelIds.size > 0
+                      ? `Track ${selectedChannelIds.size} channel${selectedChannelIds.size > 1 ? "s" : ""}`
+                      : "Select channels"}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === "telegram" && (
+            tgDone ? (
+              <div className="py-6 flex flex-col items-center gap-3 text-center">
+                <div className="w-12 h-12 bg-green-500/10 border border-green-500/20 rounded-full flex items-center justify-center">
+                  <Check size={22} className="text-green-400" />
+                </div>
+                <p className="font-display font-semibold text-foreground">Linked</p>
+                <p className="text-muted-foreground text-sm">Brainiac will pick up messages from {tgName}.</p>
               </div>
             ) : (
               <div className="space-y-3">
                 <div className="bg-background rounded-xl border border-border p-4">
-                  <p className="text-foreground text-xs font-semibold mb-1">Your account, your groups</p>
+                  <p className="text-foreground text-xs font-semibold mb-1">Any group member can do this</p>
                   <p className="text-muted-foreground text-xs leading-relaxed">
-                    Message the Brainiac bot to link your Telegram. It reads groups you're already in. No admin access needed.
+                    Add the Brainiac bot to any Telegram group you're in. You don't need to be an admin — in most groups, any member can add bots.
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <p className="text-foreground text-xs font-medium">1. Open the bot and send /start</p>
+                  <p className="text-foreground text-xs font-medium">1. Add the bot to your group</p>
                   <div className="flex gap-2">
                     <CopyableCode value="@brainiacaibot" />
                     <a href="https://t.me/brainiacaibot" target="_blank" rel="noopener noreferrer"
@@ -208,26 +303,24 @@ function ConnectModal({ onClose, onConnected, discordAuth }: {
                       Open <ExternalLink size={12} />
                     </a>
                   </div>
-                  <p className="text-muted-foreground/50 text-xs">The bot will confirm your account is linked.</p>
+                  <p className="text-muted-foreground/50 text-xs">In the group: tap the name → Add Members → search @brainiacaibot</p>
                 </div>
                 <div className="space-y-1.5">
-                  <p className="text-foreground text-xs font-medium">2. Which group to track?</p>
+                  <p className="text-foreground text-xs font-medium">2. Which group did you add it to?</p>
                   <input data-testid="input-community-name" type="text"
                     placeholder="e.g. Crypto Alpha, Base Insiders..."
-                    value={name} onChange={(e) => setName(e.target.value)}
+                    value={tgName} onChange={(e) => setTgName(e.target.value)}
                     className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-foreground text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50" />
                 </div>
+                <button data-testid="button-connect-confirm" onClick={handleTelegramDone}
+                  disabled={tgLoading || !tgName.trim()}
+                  className="w-full py-3 bg-primary hover:bg-primary/90 disabled:opacity-35 disabled:cursor-not-allowed text-primary-foreground rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                  {tgLoading ? <><RefreshCw size={14} className="animate-spin" /> Linking...</> : "Done, start tracking"}
+                </button>
               </div>
-            )}
-
-            <button data-testid="button-connect-confirm" onClick={handleConnect} disabled={!canConnect}
-              className="w-full py-3 bg-primary hover:bg-primary/90 disabled:opacity-35 disabled:cursor-not-allowed text-primary-foreground rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2">
-              {connecting
-                ? <><RefreshCw size={14} className="animate-spin" /> Connecting...</>
-                : `Connect ${tab === "discord" ? "Discord" : "Telegram"}`}
-            </button>
-          </div>
-        )}
+            )
+          )}
+        </div>
       </div>
     </div>
   );
@@ -240,14 +333,34 @@ export default function FeedPage() {
   const [showModal, setShowModal]       = useState(false);
   const [feed, setFeed]                 = useState<FeedItem[]>(MOCK_FEED);
   const [tgLoading, setTgLoading]       = useState(false);
-  const [discordAuth, setDiscordAuth]   = useState<DiscordAuth | null>(null);
-  const [connectedSources, setConnectedSources] = useState<ConnectedSource[]>([
-    { name: "Bankless DAO",   source: "Discord",  count: "47 today" },
-    { name: "Crypto Signals", source: "Telegram", count: "23 today" },
-    { name: "Base Builders",  source: "Discord",  count: "15 today" },
-    { name: "NFT Alpha",      source: "Telegram", count: "8 today"  },
-  ]);
+  const [discordLoading, setDiscordLoading] = useState(false);
 
+  const [discordAuth, setDiscordAuth] = useState<DiscordAuth | null>(() => {
+    try { return JSON.parse(localStorage.getItem(LS_DISCORD_AUTH) ?? "null"); } catch { return null; }
+  });
+
+  const [trackedChannels, setTrackedChannels] = useState<DiscordTrackedChannel[]>(() => {
+    try { return JSON.parse(localStorage.getItem(LS_DISCORD_CHANNELS) ?? "[]"); } catch { return []; }
+  });
+
+  const [connectedSources, setConnectedSources] = useState<ConnectedSource[]>([]);
+
+  const mergeItems = (incoming: FeedItem[]) => {
+    setFeed((prev) => {
+      const ids = new Set(prev.map((f) => f.id));
+      const fresh = incoming.filter((i) => !ids.has(i.id));
+      return fresh.length > 0 ? [...fresh, ...prev].slice(0, 100) : prev;
+    });
+  };
+
+  const addSource = (name: string, source: "Discord" | "Telegram", count = "live") => {
+    setConnectedSources((prev) => {
+      if (prev.find((s) => s.name === name)) return prev;
+      return [...prev, { name, source, count }];
+    });
+  };
+
+  // Restore Discord auth from URL params after OAuth redirect
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("discord_connected") === "1") {
@@ -256,19 +369,26 @@ export default function FeedPage() {
         try {
           const auth = JSON.parse(decodeURIComponent(raw)) as DiscordAuth;
           setDiscordAuth(auth);
-          const newSources = auth.guilds.slice(0, 3).map((g) => ({
-            name: g.name, source: "Discord" as const, count: "live"
-          }));
-          setConnectedSources((prev) => {
-            const names = new Set(prev.map((s) => s.name));
-            return [...prev, ...newSources.filter((s) => !names.has(s.name))];
-          });
+          localStorage.setItem(LS_DISCORD_AUTH, JSON.stringify(auth));
         } catch {}
       }
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
 
+  // Persist Discord auth whenever it changes
+  useEffect(() => {
+    if (discordAuth) localStorage.setItem(LS_DISCORD_AUTH, JSON.stringify(discordAuth));
+    else localStorage.removeItem(LS_DISCORD_AUTH);
+  }, [discordAuth]);
+
+  // Persist tracked channels whenever they change
+  useEffect(() => {
+    localStorage.setItem(LS_DISCORD_CHANNELS, JSON.stringify(trackedChannels));
+    trackedChannels.forEach((ch) => addSource(ch.guildName, "Discord", "live"));
+  }, [trackedChannels]);
+
+  // Poll Telegram updates
   const fetchTelegramUpdates = useCallback(async () => {
     setTgLoading(true);
     try {
@@ -276,7 +396,7 @@ export default function FeedPage() {
       const data = await res.json() as { messages?: TelegramMessage[]; error?: string };
       if (data.error || !data.messages?.length) return;
 
-      const newItems: FeedItem[] = data.messages.map((m) => ({
+      const items: FeedItem[] = data.messages.map((m) => ({
         id: `tg-${m.id}`,
         source: "Telegram" as const,
         server: m.chatTitle || "Telegram",
@@ -286,25 +406,49 @@ export default function FeedPage() {
         hot: isHot(m.text),
       }));
 
-      setFeed((prev) => {
-        const existingIds = new Set(prev.map((f) => f.id));
-        const fresh = newItems.filter((i) => !existingIds.has(i.id));
-        return fresh.length > 0 ? [...fresh, ...prev].slice(0, 50) : prev;
-      });
-
-      const tgChats = [...new Set(newItems.map((m) => m.server))];
-      setConnectedSources((prev) => {
-        const names = new Set(prev.map((s) => s.name));
-        const additions = tgChats
-          .filter((n) => !names.has(n))
-          .map((n) => ({ name: n, source: "Telegram" as const, count: `${newItems.filter((m) => m.server === n).length} today` }));
-        return additions.length > 0 ? [...prev, ...additions] : prev;
-      });
+      mergeItems(items);
+      const chats = [...new Set(items.map((m) => m.server))];
+      chats.forEach((c) => addSource(c, "Telegram", `${items.filter((i) => i.server === c).length} today`));
     } catch {
     } finally {
       setTgLoading(false);
     }
   }, []);
+
+  // Poll Discord channels using the user's own token
+  const fetchDiscordMessages = useCallback(async () => {
+    if (!discordAuth || trackedChannels.length === 0) return;
+    setDiscordLoading(true);
+    try {
+      const allItems: FeedItem[] = [];
+      await Promise.allSettled(
+        trackedChannels.map(async (ch) => {
+          const r = await fetch(`/api/discord/messages/${ch.guildId}/${ch.channelId}?limit=20`, {
+            headers: { "x-discord-token": discordAuth.accessToken },
+          });
+          if (!r.ok) return;
+          const data = await r.json() as { messages?: Array<{ id: string; content: string; author: string; timestamp: string }> };
+          (data.messages ?? [])
+            .filter((m) => m.content.trim().length > 0)
+            .forEach((m) => {
+              allItems.push({
+                id: `dc-${m.id}`,
+                source: "Discord",
+                server: ch.guildName,
+                msg: m.content,
+                time: timeAgo(m.timestamp),
+                tag: tagFromText(m.content),
+                hot: isHot(m.content),
+              });
+            });
+        })
+      );
+      if (allItems.length > 0) mergeItems(allItems);
+    } catch {
+    } finally {
+      setDiscordLoading(false);
+    }
+  }, [discordAuth, trackedChannels]);
 
   useEffect(() => {
     fetchTelegramUpdates();
@@ -312,12 +456,28 @@ export default function FeedPage() {
     return () => clearInterval(interval);
   }, [fetchTelegramUpdates]);
 
-  const handleConnected = (src: ConnectedSource) => {
-    setConnectedSources((prev) => {
-      const exists = prev.find((s) => s.name === src.name);
-      return exists ? prev : [...prev, src];
+  useEffect(() => {
+    if (trackedChannels.length === 0) return;
+    fetchDiscordMessages();
+    const interval = setInterval(fetchDiscordMessages, 60_000);
+    return () => clearInterval(interval);
+  }, [fetchDiscordMessages, trackedChannels.length]);
+
+  const handleChannelTracked = (guild: { id: string; name: string }, channels: Array<{ id: string; name: string }>) => {
+    setTrackedChannels((prev) => {
+      const existingIds = new Set(prev.map((c) => c.channelId));
+      const fresh = channels
+        .filter((c) => !existingIds.has(c.id))
+        .map((c) => ({ channelId: c.id, channelName: c.name, guildId: guild.id, guildName: guild.name }));
+      return [...prev, ...fresh];
     });
   };
+
+  const handleTelegramLinked = (groupName: string) => {
+    addSource(groupName, "Telegram", "live");
+  };
+
+  const isLoading = tgLoading || discordLoading;
 
   const filtered = feed.filter((item) => {
     const matchSource = activeSource === "All" || item.source === activeSource;
@@ -328,7 +488,14 @@ export default function FeedPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto animate-fade-in">
-      {showModal && <ConnectModal onClose={() => setShowModal(false)} onConnected={handleConnected} discordAuth={discordAuth} />}
+      {showModal && (
+        <ConnectModal
+          onClose={() => setShowModal(false)}
+          onChannelTracked={handleChannelTracked}
+          onTelegramLinked={handleTelegramLinked}
+          discordAuth={discordAuth}
+        />
+      )}
 
       <div className="flex items-center justify-between mb-5 md:mb-6">
         <div>
@@ -336,9 +503,10 @@ export default function FeedPage() {
           <p className="text-muted-foreground text-sm mt-0.5 hidden sm:block">Signal from your communities, filtered by AI</p>
         </div>
         <div className="flex items-center gap-2">
-          <button data-testid="button-refresh" onClick={fetchTelegramUpdates}
+          <button data-testid="button-refresh"
+            onClick={() => { fetchTelegramUpdates(); fetchDiscordMessages(); }}
             className="w-9 h-9 bg-card border border-border rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
-            {tgLoading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+            {isLoading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
           </button>
           <button data-testid="button-connect" onClick={() => setShowModal(true)}
             className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium px-3 md:px-4 py-2 rounded-xl transition-colors">
@@ -347,29 +515,47 @@ export default function FeedPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5">
-        {connectedSources.map((src) => (
-          <div key={src.name} data-testid={`card-source-${src.name.replace(/\s+/g, "-").toLowerCase()}`}
-            className="flex items-center gap-3 bg-card border border-border rounded-xl px-3 py-2.5">
-            <span className="relative flex h-2 w-2 shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="text-foreground text-xs font-medium truncate">{src.name}</p>
-              <p className="text-muted-foreground/60 text-xs">{src.count}</p>
-            </div>
-            <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${src.source === "Discord" ? "bg-primary/15 text-primary" : "bg-cyan-500/15 text-cyan-400"}`}>
-              {src.source}
-            </span>
-          </div>
-        ))}
-      </div>
-
       {discordAuth && (
         <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-green-500/8 border border-green-500/20 rounded-xl">
           <Check size={13} className="text-green-400 shrink-0" />
-          <span className="text-green-400 text-xs">Discord connected as <span className="font-medium">{discordAuth.user.displayName}</span> — {discordAuth.guilds.length} servers linked</span>
+          <span className="text-green-400 text-xs">
+            Discord connected as <span className="font-medium">{discordAuth.user.displayName}</span>
+            {trackedChannels.length > 0
+              ? ` — tracking ${trackedChannels.length} channel${trackedChannels.length > 1 ? "s" : ""} as you`
+              : " — click Connect to pick channels"}
+          </span>
+          <button onClick={() => { setDiscordAuth(null); setTrackedChannels([]); localStorage.removeItem(LS_DISCORD_AUTH); localStorage.removeItem(LS_DISCORD_CHANNELS); }}
+            className="ml-auto text-muted-foreground/50 hover:text-muted-foreground transition-colors text-xs">
+            Disconnect
+          </button>
+        </div>
+      )}
+
+      {connectedSources.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5">
+          {connectedSources.map((src) => (
+            <div key={src.name} data-testid={`card-source-${src.name.replace(/\s+/g, "-").toLowerCase()}`}
+              className="flex items-center gap-3 bg-card border border-border rounded-xl px-3 py-2.5">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-foreground text-xs font-medium truncate">{src.name}</p>
+                <p className="text-muted-foreground/60 text-xs">{src.count}</p>
+              </div>
+              <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${src.source === "Discord" ? "bg-primary/15 text-primary" : "bg-cyan-500/15 text-cyan-400"}`}>
+                {src.source}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {connectedSources.length === 0 && !discordAuth && (
+        <div className="mb-5 px-4 py-4 bg-card border border-dashed border-border rounded-xl text-center">
+          <p className="text-muted-foreground text-sm">No sources connected yet.</p>
+          <p className="text-muted-foreground/60 text-xs mt-0.5">Connect Discord or Telegram to see real signals — showing demo feed below.</p>
         </div>
       )}
 
