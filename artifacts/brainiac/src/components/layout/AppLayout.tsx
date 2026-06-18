@@ -93,13 +93,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   const { ready, authenticated, user, login, logout } = usePrivy();
   const { wallets } = useWallets();
-  const { linkWithOAuth } = useLinkWithOAuth({
-    onSuccess: () => {},
-    onError: () => {
-      setLinkingGoogle(false);
-      setLinkingTwitter(false);
-    },
-  });
+  const { initOAuth } = useLinkWithOAuth();
 
   const hasGoogle = !!user?.google;
   const hasTwitter = !!user?.twitter;
@@ -107,8 +101,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   async function handleLinkGoogle() {
     setLinkingGoogle(true);
     try {
-      await linkWithOAuth({ type: "google" });
-    } finally {
+      await initOAuth({ provider: "google" });
+    } catch {
       setLinkingGoogle(false);
     }
   }
@@ -116,8 +110,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   async function handleLinkTwitter() {
     setLinkingTwitter(true);
     try {
-      await linkWithOAuth({ type: "twitter" });
-    } finally {
+      await initOAuth({ provider: "twitter" });
+    } catch {
       setLinkingTwitter(false);
     }
   }
