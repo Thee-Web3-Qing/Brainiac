@@ -1,22 +1,28 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 
 const router = Router();
 
 const DISCORD_API = "https://discord.com/api/v10";
 
-function getRedirectUri(): string {
+function getRedirectUri(req: Request): string {
+  // Use the actual host of the incoming request so this works for both
+  // the dev environment and the published .replit.app domain without changes.
+  const host  = req.get("x-forwarded-host") ?? req.get("host");
+  const proto = req.get("x-forwarded-proto") ?? "https";
+  if (host) return `${proto}://${host}/api/discord/callback`;
+  // Last-resort fallback (local dev without proxy)
   const domain = process.env.REPLIT_DEV_DOMAIN;
   if (domain) return `https://${domain}/api/discord/callback`;
   return "http://localhost:80/api/discord/callback";
 }
 
-router.get("/auth", (_req, res) => {
+router.get("/auth", (req, res) => {
   const clientId = process.env.DISCORD_CLIENT_ID;
   if (!clientId) return res.status(500).json({ error: "Discord not configured" });
 
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: getRedirectUri(),
+    redirect_uri: getRedirectUri(req),
     response_type: "code",
     scope: "identify guilds",
   });
@@ -41,7 +47,7 @@ router.get("/callback", async (req, res) => {
         client_secret: clientSecret,
         grant_type: "authorization_code",
         code,
-        redirect_uri: getRedirectUri(),
+        redirect_uri: getRedirectUri(req),
       }),
     });
 
