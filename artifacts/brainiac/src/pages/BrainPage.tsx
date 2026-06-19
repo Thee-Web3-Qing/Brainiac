@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { Wand2, Copy, Check, RefreshCw, ChevronDown, FileText, MessageSquare, Mic, Twitter, Users, TrendingUp, Clock, BarChart3, Cpu, Zap } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Wand2, Copy, Check, RefreshCw, ChevronDown, FileText, MessageSquare, Mic, Twitter, Users, TrendingUp, Clock, BarChart3, Cpu, Zap, Send, Bot, User } from "lucide-react";
 import { useGenerateDraft } from "@workspace/api-client-react";
+import { useWallets } from "@privy-io/react-auth";
 
 const DRAFT_TYPES = [
   { id: "thread",  label: "X Thread",        icon: Twitter,       desc: "Turn feed signals into a Twitter thread" },
@@ -379,7 +380,170 @@ function CommunityIntel() {
   );
 }
 
+type ChatMessage = { role: "user" | "assistant"; content: string };
+
+const CHAT_STARTERS = [
+  "What's the biggest alpha in my feed right now?",
+  "Should I be worried about anything on-chain?",
+  "Summarize what happened in my communities today",
+  "What DeFi opportunities should I look at?",
+  "Help me write a tweet about what I'm seeing",
+];
+
+function BrainChat() {
+  const { wallets } = useWallets();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
+
+  const getContext = () => {
+    const walletContext = wallets.length
+      ? wallets.map((w) => `- ${w.address} (${w.chainId ?? "EVM"})`).join("\n")
+      : "";
+    const tgChats = localStorage.getItem("brainiac:tg_chats");
+    const discordData = localStorage.getItem("brainiac:discord_auth");
+    const parts: string[] = [];
+    if (tgChats) {
+      try {
+        const chats = JSON.parse(tgChats) as Array<{ title?: string }>;
+        if (chats.length) parts.push(`Telegram: ${chats.map((c) => c.title).filter(Boolean).join(", ")}`);
+      } catch { /* ignore */ }
+    }
+    if (discordData) {
+      try {
+        const d = JSON.parse(discordData) as { username?: string };
+        if (d.username) parts.push(`Discord: connected as ${d.username}`);
+      } catch { /* ignore */ }
+    }
+    return { walletContext, feedContext: parts.join("\n") };
+  };
+
+  const send = async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || loading) return;
+    setInput("");
+    setError(null);
+    const next: ChatMessage[] = [...messages, { role: "user", content: trimmed }];
+    setMessages(next);
+    setLoading(true);
+    try {
+      const { walletContext, feedContext } = getContext();
+      const res = await fetch("/api/brain/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: next, walletContext, feedContext }),
+      });
+      const data = (await res.json()) as { reply?: string; error?: string };
+      if (!res.ok || data.error) throw new Error(data.error ?? "Unknown error");
+      setMessages([...next, { role: "assistant", content: data.reply! }]);
+    } catch {
+      setError("Could not reach Brainiac. Try again.");
+      setMessages(next.slice(0, -1));
+      setInput(trimmed);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-13rem)] max-h-[700px] min-h-[400px]">
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto space-y-4 pr-1 pb-2">
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full gap-5 text-center px-4">
+            <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+              <Bot size={22} className="text-primary" />
+            </div>
+            <div>
+              <p className="text-foreground font-medium text-sm mb-1">Ask Brainiac anything</p>
+              <p className="text-muted-foreground text-xs leading-relaxed max-w-xs">
+                Your Web3 intelligence assistant. Ask about your feed, wallets, communities, or anything in the space.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5 justify-center">
+              {CHAT_STARTERS.map((q) => (
+                <button key={q} onClick={() => send(q)}
+                  className="text-xs border border-border text-muted-foreground hover:border-primary/40 hover:text-foreground px-3 py-1.5 rounded-full transition-colors text-left">
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {messages.map((m, i) => (
+          <div key={i} className={`flex gap-2.5 ${m.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+              m.role === "user" ? "bg-primary/20" : "bg-card border border-border"
+            }`}>
+              {m.role === "user"
+                ? <User size={12} className="text-primary" />
+                : <Bot size={12} className="text-muted-foreground" />}
+            </div>
+            <div className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+              m.role === "user"
+                ? "bg-primary text-primary-foreground rounded-tr-sm"
+                : "bg-card border border-border text-foreground rounded-tl-sm"
+            }`}>
+              <pre className="whitespace-pre-wrap font-sans">{m.content}</pre>
+            </div>
+          </div>
+        ))}
+
+        {loading && (
+          <div className="flex gap-2.5 flex-row">
+            <div className="w-6 h-6 rounded-full bg-card border border-border flex items-center justify-center shrink-0 mt-0.5">
+              <Bot size={12} className="text-muted-foreground" />
+            </div>
+            <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-3.5 py-3 flex items-center gap-1.5">
+              {[0, 1, 2].map((i) => (
+                <span key={i} className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 animate-bounce"
+                  style={{ animationDelay: `${i * 120}ms` }} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <p className="text-red-400 text-xs text-center">{error}</p>
+        )}
+
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input */}
+      <div className="pt-3 border-t border-border mt-2">
+        <div className="flex gap-2 items-end bg-card border border-border rounded-xl overflow-hidden focus-within:border-primary/40 transition-colors px-3 py-2">
+          <textarea
+            rows={1}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); }
+            }}
+            placeholder="Ask Brainiac..."
+            className="flex-1 bg-transparent text-foreground text-sm placeholder:text-muted-foreground/40 focus:outline-none resize-none leading-relaxed py-0.5"
+            style={{ maxHeight: "120px" }}
+          />
+          <button onClick={() => send(input)} disabled={!input.trim() || loading}
+            className="shrink-0 w-7 h-7 rounded-lg bg-primary disabled:opacity-30 hover:bg-primary/90 transition-colors flex items-center justify-center">
+            <Send size={13} className="text-primary-foreground" />
+          </button>
+        </div>
+        <p className="text-muted-foreground/40 text-xs mt-1.5 text-center">Shift + Enter for new line</p>
+      </div>
+    </div>
+  );
+}
+
 const TOP_TABS = [
+  { id: "chat",      label: "Chat",             icon: MessageSquare },
   { id: "content",   label: "Content Brain",    icon: Wand2 },
   { id: "community", label: "Community Intel",  icon: Users },
 ] as const;
@@ -387,7 +551,7 @@ const TOP_TABS = [
 type TopTab = typeof TOP_TABS[number]["id"];
 
 export default function BrainPage() {
-  const [activeTab, setActiveTab] = useState<TopTab>("content");
+  const [activeTab, setActiveTab] = useState<TopTab>("chat");
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto animate-fade-in">
@@ -413,6 +577,7 @@ export default function BrainPage() {
         ))}
       </div>
 
+      {activeTab === "chat"      && <BrainChat />}
       {activeTab === "content"   && <ContentBrain />}
       {activeTab === "community" && <CommunityIntel />}
     </div>

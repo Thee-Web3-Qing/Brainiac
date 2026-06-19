@@ -301,4 +301,62 @@ Be specific and actionable. Reference the actual metrics.`;
   }
 });
 
+router.post("/chat", async (req, res) => {
+  const { messages, feedContext, walletContext } = req.body as {
+    messages: Array<{ role: "user" | "assistant"; content: string }>;
+    feedContext?: string;
+    walletContext?: string;
+  };
+
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: "messages array required" });
+  }
+
+  const apiKey = process.env.QWEN_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: "AI service not configured" });
+
+  const contextParts: string[] = [];
+  if (feedContext?.trim()) {
+    contextParts.push(`Recent Web3 feed signals the user is tracking:\n${feedContext.trim()}`);
+  }
+  if (walletContext?.trim()) {
+    contextParts.push(`User's connected wallets:\n${walletContext.trim()}`);
+  }
+  const contextBlock = contextParts.length
+    ? `\n\n---\n${contextParts.join("\n\n")}\n---`
+    : "";
+
+  const systemPrompt = `You are Brainiac, a Web3 personal intelligence assistant. You help the user stay on top of crypto markets, DeFi, NFTs, DAOs, and their own on-chain activity. You have access to their live feed signals and wallet data when provided.
+
+Rules:
+- Be direct, punchy, and knowledgeable — like a smart friend in the space
+- Reference their actual feed signals and wallet data when relevant
+- If asked about price predictions or financial advice, give a balanced view with risks
+- Keep responses concise (3-6 sentences or a short bullet list) unless depth is requested
+- No corporate fluff, no "As an AI language model..." — just answer${contextBlock}`;
+
+  try {
+    const response = await fetch(`${QWEN_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "qwen-plus",
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...messages,
+        ],
+        max_tokens: 800,
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) return res.status(500).json({ error: "AI service error" });
+    const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const reply = data.choices?.[0]?.message?.content ?? "I couldn't generate a response. Try again.";
+    return res.json({ reply });
+  } catch {
+    return res.status(500).json({ error: "Failed to connect to AI service" });
+  }
+});
+
 export default router;
