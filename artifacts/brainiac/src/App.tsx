@@ -12,6 +12,7 @@ import FeedPage from "@/pages/FeedPage";
 import WalletPage from "@/pages/WalletPage";
 import BrainPage from "@/pages/BrainPage";
 import AppLayout from "@/components/layout/AppLayout";
+import UpgradePage from "@/pages/UpgradePage";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +37,9 @@ function Router() {
       </Route>
       <Route path="/brain">
         <AppLayout><BrainPage /></AppLayout>
+      </Route>
+      <Route path="/upgrade">
+        <AppLayout><UpgradePage /></AppLayout>
       </Route>
       <Route component={NotFound} />
     </Switch>

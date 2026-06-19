@@ -156,7 +156,7 @@ export default function LandingPage() {
               {
                 name: "Pro", price: "$15", period: "/month",
                 features: ["3 wallets", "Unlimited communities", "90-day history", "Unlimited AI drafts"],
-                cta: <Button className="w-full bg-primary hover:bg-primary/90 text-white">Upgrade to Pro</Button>,
+                cta: <Link href="/upgrade"><Button className="w-full bg-primary hover:bg-primary/90 text-white">Upgrade to Pro</Button></Link>,
                 highlight: true,
               },
               {

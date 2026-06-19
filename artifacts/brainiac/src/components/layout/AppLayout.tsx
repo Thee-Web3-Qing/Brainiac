@@ -96,7 +96,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const [linkConflict, setLinkConflict] = useState<"google" | "twitter" | null>(null);
   const SS_KEY = "brainiac:og:session_recorded";
 
-  const { ready, authenticated, user, login, logout } = usePrivy();
+  const { ready, authenticated, user, login, logout, exportWallet } = usePrivy();
   const { wallets } = useWallets();
   const { initOAuth, loading: oauthLinking } = useLinkWithOAuth();
   const { connectWallet } = useConnectWallet();
@@ -108,7 +108,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const googleAccount = user?.linkedAccounts?.find((a) => a.type === "google_oauth") as { email?: string } | undefined;
   const twitterAccount = user?.linkedAccounts?.find((a) => a.type === "twitter_oauth") as { username?: string } | undefined;
 
-  const socialMethodCount = [hasGoogle, hasTwitter].filter(Boolean).length;
 
   // Detect login method from linked accounts
   function detectLoginMethod(): string {
@@ -137,14 +136,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authenticated, ready, user?.id]);
 
-  // After login: if user only has 1 social method, open the profile panel so they can link the other right away
-  useEffect(() => {
-    if (authenticated && ready && socialMethodCount < 2) {
-      const timer = setTimeout(() => setProfileOpen(true), 600);
-      return () => clearTimeout(timer);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authenticated]);
 
   async function handleLinkGoogle() {
     setLinkConflict(null);
@@ -255,16 +246,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             </button>
           ) : (
             <button
-              onClick={login}
-              disabled={!ready}
-              className="flex items-center gap-3 w-full p-2.5 rounded-xl hover:bg-primary/10 transition-colors text-left disabled:opacity-50"
+              onClick={ready ? login : undefined}
+              className="flex items-center gap-3 w-full p-2.5 rounded-xl hover:bg-primary/10 transition-colors text-left"
             >
               <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                <LogIn className="w-4 h-4 text-primary" />
+                {ready ? <LogIn className="w-4 h-4 text-primary" /> : <Loader2 className="w-4 h-4 text-primary animate-spin" />}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-primary">Sign in</div>
-                <div className="text-xs text-muted-foreground">Connect your account</div>
+                <div className="text-xs text-muted-foreground">{ready ? "Connect your account" : "Loading..."}</div>
               </div>
             </button>
           )}
@@ -292,10 +282,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </button>
         ) : (
           <button
-            onClick={login}
-            disabled={!ready}
-            className="text-sm font-medium text-primary disabled:opacity-50"
+            onClick={ready ? login : undefined}
+            className="flex items-center gap-1.5 text-sm font-medium text-primary"
           >
+            {!ready && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             Sign in
           </button>
         )}
@@ -352,16 +342,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                   )}
                 </div>
 
-                <div className="bg-background rounded-xl border border-border p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-muted-foreground">Current plan</span>
-                    <span className="text-xs font-semibold text-foreground">Free</span>
-                  </div>
-                  <div className="h-1.5 bg-border rounded-full overflow-hidden mb-2">
-                    <div className="h-full bg-primary rounded-full" style={{ width: "34%" }} />
-                  </div>
-                  <p className="text-muted-foreground/60 text-xs">5 of 15 AI drafts used this month</p>
-                </div>
               </div>
 
               {/* 0G Login History */}
@@ -412,12 +392,19 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
               {/* Actions */}
               <div className="p-3 space-y-1">
-                <button className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors text-left">
-                  <Settings className="w-4 h-4" /> Settings
-                </button>
-                <button className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-primary hover:bg-primary/10 transition-colors text-left">
-                  <CreditCard className="w-4 h-4" /> Upgrade to Pro
-                </button>
+                {wallets.some((w) => w.walletClientType === "privy") && (
+                  <button
+                    onClick={() => exportWallet()}
+                    className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors text-left"
+                  >
+                    <Settings className="w-4 h-4" /> Export recovery phrase
+                  </button>
+                )}
+                <Link href="/upgrade" onClick={() => setProfileOpen(false)}>
+                  <button className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-primary hover:bg-primary/10 transition-colors text-left">
+                    <CreditCard className="w-4 h-4" /> Upgrade to Pro
+                  </button>
+                </Link>
               </div>
             </div>
 
