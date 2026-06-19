@@ -4,7 +4,7 @@ import { recordAIInteraction } from "../lib/og-chain";
 
 const router = Router();
 
-const QWEN_BASE_URL = process.env.QWEN_BASE_URL ?? "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1";
+const QWEN_BASE_URL = process.env.QWEN_BASE_URL ?? "https://ws-kslei9o3pxdkd1zd.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1";
 const QWEN_WORKSPACE_ID = process.env.QWEN_WORKSPACE_ID ?? "ws-kslei9o3pxdkd1zd";
 
 async function callQwen(
