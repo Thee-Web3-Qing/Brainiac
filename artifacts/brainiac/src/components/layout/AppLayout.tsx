@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, ReactNode } from "react";
+import { useState, useEffect, ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { Brain, LayoutDashboard, Zap, Wallet, MessageSquare, ChevronRight, Settings, X, CreditCard, LogOut, LogIn, Check, Plus, Loader2, AlertTriangle } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -94,7 +94,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const [linkingGoogle, setLinkingGoogle] = useState(false);
   const [linkingTwitter, setLinkingTwitter] = useState(false);
   const [linkConflict, setLinkConflict] = useState<"google" | "twitter" | null>(null);
-  const recordedRef = useRef<string | null>(null);
+  const SS_KEY = "brainiac:og:session_recorded";
 
   const { ready, authenticated, user, login, logout } = usePrivy();
   const { wallets } = useWallets();
@@ -123,8 +123,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   // Record login on 0G Newton testnet (fire-and-forget, one per session)
   useEffect(() => {
     if (!authenticated || !ready || !user?.id) return;
-    if (recordedRef.current === user.id) return;
-    recordedRef.current = user.id;
+    if (sessionStorage.getItem(SS_KEY) === user.id) return;
+    sessionStorage.setItem(SS_KEY, user.id);
 
     const walletAddress = wallets[0]?.address;
     const loginMethod = detectLoginMethod();
@@ -423,7 +423,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
             <div className="p-4 border-t border-border">
               <button
-                onClick={() => { logout(); setProfileOpen(false); }}
+                onClick={() => { sessionStorage.removeItem(SS_KEY); logout(); setProfileOpen(false); }}
                 className="flex items-center gap-2 text-muted-foreground/60 hover:text-muted-foreground text-xs transition-colors"
               >
                 <LogOut className="w-3.5 h-3.5" /> Sign out
