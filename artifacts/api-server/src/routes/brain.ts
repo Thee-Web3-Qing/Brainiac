@@ -4,7 +4,7 @@ import { recordAIInteraction } from "../lib/og-chain";
 
 const router = Router();
 
-const QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+const QWEN_BASE_URL = process.env.QWEN_BASE_URL ?? "https://ws-wo6rq9lwsett9if1.ap-northeast-1.maas.aliyuncs.com/compatible-mode/v1";
 
 async function callQwen(
   apiKey: string,
