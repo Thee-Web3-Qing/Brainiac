@@ -9,6 +9,9 @@ const LS_DISCORD_CHANNELS = "brainiac:discord_channels";
 const LS_TG_SESSION       = "brainiac:tg_session";
 const LS_TG_CHATS         = "brainiac:tg_chats";
 
+const TG_POLL_INTERVAL_MS  = 60_000;
+const RECONNECT_STALE_MS   = TG_POLL_INTERVAL_MS * 1.5;
+
 type FeedItem = {
   id: string;
   source: "Discord" | "Telegram";
@@ -431,8 +434,9 @@ export default function FeedPage() {
   const [search, setSearch]             = useState("");
   const [showModal, setShowModal]       = useState(false);
   const [feed, setFeed]                 = useState<FeedItem[]>(MOCK_FEED);
-  const [tgLoading, setTgLoading]       = useState(false);
-  const [discordLoading, setDiscordLoading] = useState(false);
+  const [tgLoading, setTgLoading]             = useState(false);
+  const [lastTgSuccessAt, setLastTgSuccessAt] = useState<number | null>(null);
+  const [discordLoading, setDiscordLoading]   = useState(false);
   const [connectedSources, setConnectedSources] = useState<ConnectedSource[]>([]);
 
   const [discordAuth, setDiscordAuth] = useState<DiscordAuth | null>(() => {
@@ -500,6 +504,7 @@ export default function FeedPage() {
     setTgLoading(true);
     try {
       const allItems: FeedItem[] = [];
+      let anySuccess = false;
       await Promise.allSettled(
         trackedTgChats.map(async (chat) => {
           const r = await fetch(`/api/telegram/user/messages/${chat.id}?limit=20`, {
@@ -517,6 +522,7 @@ export default function FeedPage() {
             }
             return;
           }
+          anySuccess = true;
           const data = await r.json() as { messages?: Array<{ id: string; text: string; date: string }> };
           (data.messages ?? []).filter((m) => m.text.trim().length > 0).forEach((m) => {
             allItems.push({
@@ -532,6 +538,7 @@ export default function FeedPage() {
         })
       );
       if (allItems.length > 0) mergeItems(allItems);
+      if (anySuccess) setLastTgSuccessAt(Date.now());
     } catch {
     } finally {
       setTgLoading(false);
@@ -573,7 +580,7 @@ export default function FeedPage() {
 
   useEffect(() => {
     fetchUserTgMessages();
-    const iv = setInterval(fetchUserTgMessages, 60_000);
+    const iv = setInterval(fetchUserTgMessages, TG_POLL_INTERVAL_MS);
     return () => clearInterval(iv);
   }, [fetchUserTgMessages]);
 
@@ -605,6 +612,7 @@ export default function FeedPage() {
     setTgSession(null); setTrackedTgChats([]);
     localStorage.removeItem(LS_TG_SESSION); localStorage.removeItem(LS_TG_CHATS);
     setConnectedSources((prev) => prev.filter((s) => s.source !== "Telegram"));
+    setLastTgSuccessAt(null);
   };
 
   const isLoading = tgLoading || discordLoading;
@@ -677,22 +685,32 @@ export default function FeedPage() {
 
       {connectedSources.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5">
-          {connectedSources.map((src) => (
-            <div key={src.name} data-testid={`card-source-${src.name.replace(/\s+/g, "-").toLowerCase()}`}
-              className="flex items-center gap-3 bg-card border border-border rounded-xl px-3 py-2.5">
-              <span className="relative flex h-2 w-2 shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="text-foreground text-xs font-medium truncate">{src.name}</p>
-                <p className="text-muted-foreground/60 text-xs">{src.count}</p>
+          {connectedSources.map((src) => {
+            const isReconnecting = src.source === "Telegram" && tgLoading &&
+              (lastTgSuccessAt === null || Date.now() - lastTgSuccessAt > RECONNECT_STALE_MS);
+            return (
+              <div key={src.name} data-testid={`card-source-${src.name.replace(/\s+/g, "-").toLowerCase()}`}
+                className="flex items-center gap-3 bg-card border border-border rounded-xl px-3 py-2.5">
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isReconnecting ? "bg-amber-400" : "bg-green-400"}`} />
+                  <span className={`relative inline-flex rounded-full h-2 w-2 ${isReconnecting ? "bg-amber-400" : "bg-green-400"}`} />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-foreground text-xs font-medium truncate">{src.name}</p>
+                  <p className="text-muted-foreground/60 text-xs">{src.count}</p>
+                </div>
+                {isReconnecting ? (
+                  <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 shrink-0">
+                    <Loader2 size={10} className="animate-spin" /> Reconnecting...
+                  </span>
+                ) : (
+                  <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${src.source === "Discord" ? "bg-primary/15 text-primary" : "bg-cyan-500/15 text-cyan-400"}`}>
+                    {src.source}
+                  </span>
+                )}
               </div>
-              <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${src.source === "Discord" ? "bg-primary/15 text-primary" : "bg-cyan-500/15 text-cyan-400"}`}>
-                {src.source}
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
