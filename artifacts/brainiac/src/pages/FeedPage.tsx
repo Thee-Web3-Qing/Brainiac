@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { usePrivy } from "@privy-io/react-auth";
 import { Plus, Search, RefreshCw, X, MessageSquare, Send, Filter, Check, Copy, ExternalLink, Loader2, ChevronRight, Phone, KeyRound } from "lucide-react";
 
 const SOURCES = ["All", "Discord", "Telegram"];
@@ -422,6 +423,8 @@ function ConnectModal({ onClose, onChannelTracked, onTelegramConnected, discordA
 }
 
 export default function FeedPage() {
+  const { authenticated, getAccessToken } = usePrivy();
+
   const [activeSource, setActiveSource] = useState("All");
   const [activeTag, setActiveTag]       = useState("All");
   const [search, setSearch]             = useState("");
@@ -444,6 +447,20 @@ export default function FeedPage() {
   const [trackedTgChats, setTrackedTgChats] = useState<TgChat[]>(() => {
     try { return JSON.parse(localStorage.getItem(LS_TG_CHATS) ?? "[]"); } catch { return []; }
   });
+
+  // Track whether we've already attempted to load from server this session
+  const serverSessionLoaded = useRef(false);
+
+  /** Returns Authorization header value for the current Privy user, or null. */
+  const getAuthHeader = useCallback(async (): Promise<string | null> => {
+    if (!authenticated) return null;
+    try {
+      const token = await getAccessToken();
+      return token ? `Bearer ${token}` : null;
+    } catch {
+      return null;
+    }
+  }, [authenticated, getAccessToken]);
 
   const mergeItems = useCallback((incoming: FeedItem[]) => {
     setFeed((prev) => {
@@ -480,6 +497,39 @@ export default function FeedPage() {
   const addSource = (name: string, source: "Discord" | "Telegram", count = "live") => {
     setConnectedSources((prev) => prev.find((s) => s.name === name) ? prev : [...prev, { name, source, count }]);
   };
+
+  // Load Telegram session from server when user is logged in with Privy
+  useEffect(() => {
+    if (!authenticated || serverSessionLoaded.current) return;
+    serverSessionLoaded.current = true;
+
+    (async () => {
+      const authHeader = await getAuthHeader();
+      if (!authHeader) return;
+
+      // Only auto-restore if there is no session already in localStorage
+      const localSession = localStorage.getItem(LS_TG_SESSION);
+      if (localSession) return;
+
+      try {
+        const r = await fetch("/api/telegram/user/session", {
+          headers: { Authorization: authHeader },
+        });
+        if (!r.ok) return;
+        const data = await r.json() as { session: string | null; trackedChats: TgChat[] };
+        if (data.session) {
+          setTgSession(data.session);
+          localStorage.setItem(LS_TG_SESSION, data.session);
+          if (data.trackedChats.length > 0) {
+            setTrackedTgChats(data.trackedChats);
+            localStorage.setItem(LS_TG_CHATS, JSON.stringify(data.trackedChats));
+          }
+        }
+      } catch {
+        // Non-critical — fall back to localStorage only
+      }
+    })();
+  }, [authenticated, getAuthHeader]);
 
   // Restore Discord auth from OAuth redirect
   useEffect(() => {
@@ -539,6 +589,14 @@ export default function FeedPage() {
                 localStorage.removeItem(LS_TG_CHATS);
                 setConnectedSources((prev) => prev.filter((s) => s.source !== "Telegram"));
                 setTgSessionExpired(true);
+                // Also remove from server
+                getAuthHeader().then((authHeader) => {
+                  if (!authHeader) return;
+                  fetch("/api/telegram/user/session", {
+                    method: "DELETE",
+                    headers: { Authorization: authHeader },
+                  }).catch(() => {});
+                });
               }
             }
             return;
@@ -624,10 +682,28 @@ export default function FeedPage() {
   const handleTelegramConnected = (session: string, chats: TgChat[]) => {
     setTgSession(session);
     setTgSessionExpired(false);
-    setTrackedTgChats((prev) => {
-      const ids = new Set(prev.map((c) => c.id));
-      return [...prev, ...chats.filter((c) => !ids.has(c.id))];
-    });
+
+    // Compute merged list synchronously so we can send it to the server
+    const existingIds = new Set(trackedTgChats.map((c) => c.id));
+    const newChats = chats.filter((c) => !existingIds.has(c.id));
+    const allChats = [...trackedTgChats, ...newChats];
+
+    setTrackedTgChats(allChats);
+
+    // Persist to server if the user is logged in with Privy
+    (async () => {
+      const authHeader = await getAuthHeader();
+      if (!authHeader) return;
+      try {
+        await fetch("/api/telegram/user/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: authHeader },
+          body: JSON.stringify({ sessionString: session, trackedChats: allChats }),
+        });
+      } catch {
+        // Non-critical — session is still saved in localStorage
+      }
+    })();
   };
 
   const disconnectTelegram = () => {
@@ -635,6 +711,20 @@ export default function FeedPage() {
     localStorage.removeItem(LS_TG_SESSION); localStorage.removeItem(LS_TG_CHATS);
     setConnectedSources((prev) => prev.filter((s) => s.source !== "Telegram"));
     setLastTgSuccessAt(null);
+
+    // Remove from server if the user is logged in with Privy
+    (async () => {
+      const authHeader = await getAuthHeader();
+      if (!authHeader) return;
+      try {
+        await fetch("/api/telegram/user/session", {
+          method: "DELETE",
+          headers: { Authorization: authHeader },
+        });
+      } catch {
+        // Non-critical
+      }
+    })();
   };
 
   const isLoading = tgLoading || discordLoading;

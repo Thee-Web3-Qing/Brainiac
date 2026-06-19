@@ -2,6 +2,8 @@ import { Router } from "express";
 import { TelegramClient, sessions as tgSessions, Api } from "telegram";
 const { StringSession } = tgSessions;
 import crypto from "crypto";
+import { query } from "../lib/db.js";
+import { getPrivyUserId } from "../lib/privy.js";
 
 const router = Router();
 
@@ -151,6 +153,99 @@ router.post("/auth/verify", async (req, res) => {
       return res.status(400).json({ error: "Invalid or expired code — please try again" });
     }
     return res.status(400).json({ error: `Verification failed: ${msg}` });
+  }
+});
+
+// --- Server-side session persistence (requires Privy auth) ---
+
+type TgChat = { id: string; title: string };
+
+// GET /session — retrieve stored session string + tracked chats for the logged-in user
+router.get("/session", async (req, res) => {
+  const userId = await getPrivyUserId(req);
+  if (!userId) return res.status(401).json({ error: "Authentication required" });
+
+  try {
+    const result = await query<{ session_string: string; tracked_chats: TgChat[] }>(
+      "SELECT session_string, tracked_chats FROM telegram_sessions WHERE privy_user_id = $1",
+      [userId]
+    );
+    if (result.rows.length === 0) {
+      return res.json({ session: null, trackedChats: [] });
+    }
+    const row = result.rows[0];
+    return res.json({ session: row.session_string, trackedChats: row.tracked_chats ?? [] });
+  } catch (err) {
+    console.error("telegram session GET error:", err);
+    return res.status(500).json({ error: "Failed to retrieve session" });
+  }
+});
+
+// POST /session — save or update session string + tracked chats for the logged-in user
+router.post("/session", async (req, res) => {
+  const userId = await getPrivyUserId(req);
+  if (!userId) return res.status(401).json({ error: "Authentication required" });
+
+  const { sessionString, trackedChats } = req.body as {
+    sessionString?: string;
+    trackedChats?: TgChat[];
+  };
+
+  if (!sessionString) return res.status(400).json({ error: "sessionString required" });
+
+  try {
+    await query(
+      `INSERT INTO telegram_sessions (privy_user_id, session_string, tracked_chats, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (privy_user_id) DO UPDATE
+         SET session_string = EXCLUDED.session_string,
+             tracked_chats  = EXCLUDED.tracked_chats,
+             updated_at     = NOW()`,
+      [userId, sessionString, JSON.stringify(trackedChats ?? [])]
+    );
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("telegram session POST error:", err);
+    return res.status(500).json({ error: "Failed to save session" });
+  }
+});
+
+// PATCH /session/chats — update only the tracked chats list (session must already exist)
+router.patch("/session/chats", async (req, res) => {
+  const userId = await getPrivyUserId(req);
+  if (!userId) return res.status(401).json({ error: "Authentication required" });
+
+  const { trackedChats } = req.body as { trackedChats?: TgChat[] };
+  if (!trackedChats) return res.status(400).json({ error: "trackedChats required" });
+
+  try {
+    const result = await query(
+      `UPDATE telegram_sessions
+       SET tracked_chats = $2, updated_at = NOW()
+       WHERE privy_user_id = $1`,
+      [userId, JSON.stringify(trackedChats)]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "No stored session found — connect Telegram first" });
+    }
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("telegram session PATCH chats error:", err);
+    return res.status(500).json({ error: "Failed to update chats" });
+  }
+});
+
+// DELETE /session — remove stored session for the logged-in user
+router.delete("/session", async (req, res) => {
+  const userId = await getPrivyUserId(req);
+  if (!userId) return res.status(401).json({ error: "Authentication required" });
+
+  try {
+    await query("DELETE FROM telegram_sessions WHERE privy_user_id = $1", [userId]);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("telegram session DELETE error:", err);
+    return res.status(500).json({ error: "Failed to delete session" });
   }
 });
 
