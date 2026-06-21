@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Plus, ExternalLink, TrendingUp, TrendingDown, X, Copy, Check, Pencil, ArrowUpDown, Layers, Cpu, RefreshCw, Database, Loader2 } from "lucide-react";
 import { useWallets } from "@privy-io/react-auth";
-import { getWalletActivity, activityToText, getActiveProtocols, getTotalYield } from "../lib/wallet-activity";
+import { getWalletActivity, getActiveProtocols, getTotalYield } from "../lib/wallet-activity";
 import { saveToOG, formatCID, OG_EXPLORER, type OGRecord } from "../lib/og-storage";
 
 type Wallet = {
@@ -206,36 +206,40 @@ function ActivityTab({ wallet }: { wallet: Wallet }) {
   const { txs, loading, error, refetch } = useAlchemyTxs(wallet.address, wallet.chain);
 
   const mockActivity = getWalletActivity(wallet.chain);
-  const protocols    = getActiveProtocols(mockActivity);
-  const totalYield   = getTotalYield(mockActivity);
 
   const isReal = !isMock && txs !== null;
+
+  const realStats = isReal ? (() => {
+    const total = txs!.length;
+    const tokenTxs = txs!.filter((t) => t.category === "erc20" || t.category === "erc721").length;
+    const nativeTxs = txs!.filter((t) => t.category === "external" || t.category === "internal").length;
+    return [
+      { label: "Total txs",     value: total.toString() },
+      { label: "Token transfers", value: tokenTxs.toString() },
+      { label: "Native transfers", value: nativeTxs.toString() },
+    ];
+  })() : [
+    { label: "Protocols used",   value: "—" },
+    { label: "Total yield",      value: "—" },
+    { label: "Active positions", value: "—" },
+  ];
+
+  const stats = isReal ? realStats : [
+    { label: "Protocols used",   value: getActiveProtocols(mockActivity).length.toString() },
+    { label: "Total yield",      value: `$${getTotalYield(mockActivity)}` },
+    { label: "Active positions", value: mockActivity.filter((a) => a.type === "deposit" || a.type === "stake").length.toString() },
+  ];
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-2">
-        {[
-          { label: "Protocols used",   value: protocols.length.toString() },
-          { label: "Total yield",      value: `$${totalYield}` },
-          { label: "Active positions", value: mockActivity.filter((a) => a.type === "deposit" || a.type === "stake").length.toString() },
-        ].map((s) => (
+        {stats.map((s) => (
           <div key={s.label} className="bg-card border border-border rounded-xl px-3 py-2.5">
             <p className="text-muted-foreground text-xs mb-1">{s.label}</p>
             <p className="text-foreground font-display font-semibold text-sm">{s.value}</p>
           </div>
         ))}
       </div>
-
-      {!isMock && protocols.length > 0 && (
-        <div className="bg-card border border-border rounded-xl px-4 py-3">
-          <p className="text-muted-foreground text-xs mb-2">Active in</p>
-          <div className="flex flex-wrap gap-1.5">
-            {protocols.map((p) => (
-              <span key={p} className="text-xs bg-background border border-border text-foreground px-2.5 py-1 rounded-full">{p}</span>
-            ))}
-          </div>
-        </div>
-      )}
 
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
         <div className="px-4 py-3 border-b border-border flex items-center justify-between">
@@ -325,10 +329,17 @@ function IntelTab({ wallet }: { wallet: Wallet }) {
   const [answer, setAnswer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ogRecord, setOgRecord] = useState<OGRecord | null>(null);
+  const { txs } = useAlchemyTxs(wallet.address, wallet.chain);
 
   const ask = async (q: string) => {
     setAnswer(null); setError(null); setOgRecord(null); setLoading(true);
-    const activity = getWalletActivity(wallet.chain);
+    const activity = (txs ?? []).slice(0, 30).map((tx) => ({
+      date: tx.timestamp ? new Date(tx.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "unknown",
+      type: tx.category,
+      protocol: tx.to ? short(tx.to) : "unknown",
+      description: `${tx.category} — ${tx.value} ${tx.asset}`,
+      usdValue: tx.value,
+    }));
     try {
       const res = await fetch("/api/brain/wallet-intel", {
         method: "POST",
@@ -338,11 +349,7 @@ function IntelTab({ wallet }: { wallet: Wallet }) {
           label: wallet.label,
           address: wallet.address,
           chain: wallet.chain,
-          activity: activityToText(activity).split("\n").map((line) => {
-            const match = line.match(/\[(.*?)\] (\w+) on (.*?): (.*?) — (\$[\d,]+)(.*)?$/);
-            if (!match) return null;
-            return { date: match[1], type: match[2].toLowerCase(), protocol: match[3], description: match[4], usdValue: match[5] };
-          }).filter(Boolean),
+          activity,
         }),
       });
       const data = await res.json() as { answer?: string; error?: string };

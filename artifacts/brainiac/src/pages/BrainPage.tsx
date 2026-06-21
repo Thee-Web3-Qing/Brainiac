@@ -168,16 +168,41 @@ async function buildFeedContext(): Promise<{ feedContext: string; feedMessages: 
     }
   } catch { /* ignore */ }
 
-  // Telegram: fetch recent bot updates
+  // Telegram: prefer user session (GramJS), fall back to bot updates
   try {
-    const r = await fetch("/api/telegram/updates?limit=20");
-    if (r.ok) {
-      const data = await r.json() as { messages?: Array<{ text: string; chatTitle?: string; from: string; date: string }> };
-      const tgMsgs = (data.messages ?? []).filter((m) => m.text?.trim());
-      if (tgMsgs.length > 0) {
-        const lines = tgMsgs.slice(0, 15).map((m) => `[${m.chatTitle ?? "Telegram"}] ${m.from}: ${m.text.slice(0, 300)}`);
-        parts.push(`Telegram messages:\n${lines.join("\n")}`);
-        tgMsgs.forEach((m) => msgs.push({ source: "Telegram", server: m.chatTitle ?? "Telegram", text: m.text }));
+    const tgSession = localStorage.getItem("brainiac:tg_session");
+    const tgChats = JSON.parse(localStorage.getItem("brainiac:tg_chats") ?? "[]") as Array<{ id: string; title: string }>;
+    if (tgSession && tgChats.length > 0) {
+      const lines: string[] = [];
+      for (const chat of tgChats.slice(0, 3)) {
+        try {
+          const r = await fetch(`/api/telegram/user/messages/${chat.id}?limit=15`, {
+            headers: { "x-tg-session": tgSession },
+          });
+          if (r.ok) {
+            const data = await r.json() as { messages?: Array<{ id: string; text: string; date: string }> };
+            (data.messages ?? []).filter((m) => m.text?.trim()).slice(0, 12).forEach((m) => {
+              const d = new Date(m.date).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+              lines.push(`[${d}] ${chat.title}: ${m.text.slice(0, 300)}`);
+              msgs.push({ source: "Telegram", server: chat.title, text: m.text });
+            });
+          }
+        } catch { /* skip chat */ }
+      }
+      if (lines.length > 0) {
+        parts.push(`Telegram messages (${tgChats.slice(0, 3).map((c) => c.title).join(", ")}):\n${lines.join("\n")}`);
+      }
+    } else {
+      // Fall back to bot updates if no user session
+      const r = await fetch("/api/telegram/updates?limit=20");
+      if (r.ok) {
+        const data = await r.json() as { messages?: Array<{ text: string; chatTitle?: string; from: string; date: string }> };
+        const tgMsgs = (data.messages ?? []).filter((m) => m.text?.trim());
+        if (tgMsgs.length > 0) {
+          const lines = tgMsgs.slice(0, 15).map((m) => `[${m.chatTitle ?? "Telegram"}] ${m.from}: ${m.text.slice(0, 300)}`);
+          parts.push(`Telegram messages:\n${lines.join("\n")}`);
+          tgMsgs.forEach((m) => msgs.push({ source: "Telegram", server: m.chatTitle ?? "Telegram", text: m.text }));
+        }
       }
     }
   } catch { /* ignore */ }
