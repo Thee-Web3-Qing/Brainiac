@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Link } from "wouter";
 import { Zap, Wallet, MessageSquare, TrendingUp, ArrowRight, Plus, Bell, Sparkles, RefreshCw, ChevronDown, Loader2 } from "lucide-react";
 import { useWallets, usePrivy } from "@privy-io/react-auth";
+import { useToast } from "@/hooks/use-toast";
 
 type LiveFeedItem = { id: string; source: "Discord" | "Telegram"; server: string; msg: string; time: string; hot: boolean };
 
@@ -23,21 +24,56 @@ function useLiveFeed() {
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let alive = true;
-    fetch("/api/telegram/updates?limit=8")
-      .then((r) => r.json())
-      .then((d: { messages?: Array<{ text: string; chatTitle?: string; date?: string }> }) => {
-        if (!alive) return;
-        setItems((d.messages ?? []).filter((m) => m.text?.trim()).map((m, i) => ({
-          id: String(i),
-          source: "Telegram" as const,
-          server: m.chatTitle ?? "Telegram",
-          msg: m.text,
-          time: m.date ? msgTimeAgo(m.date) : "recently",
-          hot: isHotMsg(m.text),
-        })));
-      })
-      .catch(() => {})
-      .finally(() => { if (alive) setLoading(false); });
+    (async () => {
+      const all: LiveFeedItem[] = [];
+      try {
+        // Try user Telegram session
+        const tgSession = localStorage.getItem("brainiac:tg_session");
+        const tgChats = JSON.parse(localStorage.getItem("brainiac:tg_chats") ?? "[]") as Array<{ id: string; title: string }>;
+        if (tgSession && tgChats.length > 0) {
+          for (const chat of tgChats.slice(0, 3)) {
+            try {
+              const r = await fetch(`/api/telegram/user/messages/${chat.id}?limit=8`, { headers: { "x-tg-session": tgSession } });
+              if (r.ok) {
+                const data = await r.json() as { messages?: Array<{ id: string; text: string; date: string }> };
+                (data.messages ?? []).filter((m) => m.text?.trim()).slice(0, 5).forEach((m) => {
+                  all.push({ id: `tgu-${chat.id}-${m.id}`, source: "Telegram", server: chat.title, msg: m.text, time: m.date ? msgTimeAgo(m.date) : "recently", hot: isHotMsg(m.text) });
+                });
+              }
+            } catch { /* skip */ }
+          }
+        }
+      } catch { /* ignore */ }
+      try {
+        // Try Discord user token
+        const discordAuth = JSON.parse(localStorage.getItem("brainiac:discord_auth") ?? "null") as { accessToken: string } | null;
+        const dcChannels = JSON.parse(localStorage.getItem("brainiac:discord_channels") ?? "[]") as Array<{ channelId: string; guildId: string; guildName: string }>;
+        if (discordAuth?.accessToken && dcChannels.length > 0) {
+          for (const ch of dcChannels.slice(0, 2)) {
+            try {
+              const r = await fetch(`/api/discord/messages/${ch.guildId}/${ch.channelId}?limit=8`, { headers: { "x-discord-token": discordAuth.accessToken } });
+              if (r.ok) {
+                const data = await r.json() as { messages?: Array<{ id: string; content: string; timestamp: string }> };
+                (data.messages ?? []).filter((m) => m.content.trim()).slice(0, 5).forEach((m) => {
+                  all.push({ id: `dc-${m.id}`, source: "Discord", server: ch.guildName, msg: m.content, time: msgTimeAgo(m.timestamp), hot: isHotMsg(m.content) });
+                });
+              }
+            } catch { /* skip */ }
+          }
+        }
+      } catch { /* ignore */ }
+      // Fall back to bot telegram if no user data
+      if (all.length === 0) {
+        try {
+          const r = await fetch("/api/telegram/updates?limit=8");
+          const d = await r.json() as { messages?: Array<{ text: string; chatTitle?: string; date?: string }> };
+          (d.messages ?? []).filter((m) => m.text?.trim()).forEach((m, i) => {
+            all.push({ id: String(i), source: "Telegram", server: m.chatTitle ?? "Telegram", msg: m.text, time: m.date ? msgTimeAgo(m.date) : "recently", hot: isHotMsg(m.text) });
+          });
+        } catch { /* ignore */ }
+      }
+      if (alive) { setItems(all); setLoading(false); }
+    })();
     return () => { alive = false; };
   }, []);
   return { items, loading };
@@ -67,16 +103,48 @@ function BriefingCard() {
   const [liveFeed, setLiveFeed] = useState<string[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Pull real Telegram messages for briefing context
+  // Pull real messages from connected Discord + Telegram for briefing context
   useEffect(() => {
-    fetch("/api/telegram/updates?limit=30")
-      .then((r) => r.json())
-      .then((d: { messages?: Array<{ text: string; chatTitle?: string }> }) => {
-        if (d.messages?.length) {
-          setLiveFeed(d.messages.map((m) => `[${m.chatTitle ?? "Telegram"}] ${m.text}`));
+    (async () => {
+      const lines: string[] = [];
+      try {
+        const discordAuth = JSON.parse(localStorage.getItem("brainiac:discord_auth") ?? "null") as { accessToken: string } | null;
+        const dcChannels = JSON.parse(localStorage.getItem("brainiac:discord_channels") ?? "[]") as Array<{ channelId: string; guildId: string; guildName: string }>;
+        if (discordAuth?.accessToken && dcChannels.length > 0) {
+          for (const ch of dcChannels.slice(0, 2)) {
+            try {
+              const r = await fetch(`/api/discord/messages/${ch.guildId}/${ch.channelId}?limit=10`, { headers: { "x-discord-token": discordAuth.accessToken } });
+              if (r.ok) {
+                const data = await r.json() as { messages?: Array<{ content: string }> };
+                (data.messages ?? []).filter((m) => m.content.trim()).slice(0, 8).forEach((m) => lines.push(`[Discord / ${ch.guildName}] ${m.content}`));
+              }
+            } catch { /* skip */ }
+          }
         }
-      })
-      .catch(() => {});
+      } catch { /* ignore */ }
+      try {
+        const tgSession = localStorage.getItem("brainiac:tg_session");
+        const tgChats = JSON.parse(localStorage.getItem("brainiac:tg_chats") ?? "[]") as Array<{ id: string; title: string }>;
+        if (tgSession && tgChats.length > 0) {
+          for (const chat of tgChats.slice(0, 2)) {
+            try {
+              const r = await fetch(`/api/telegram/user/messages/${chat.id}?limit=10`, { headers: { "x-tg-session": tgSession } });
+              if (r.ok) {
+                const data = await r.json() as { messages?: Array<{ text: string }> };
+                (data.messages ?? []).filter((m) => m.text?.trim()).slice(0, 8).forEach((m) => lines.push(`[Telegram / ${chat.title}] ${m.text}`));
+              }
+            } catch { /* skip */ }
+          }
+        } else {
+          const r = await fetch("/api/telegram/updates?limit=30");
+          if (r.ok) {
+            const d = await r.json() as { messages?: Array<{ text: string; chatTitle?: string }> };
+            (d.messages ?? []).filter((m) => m.text?.trim()).slice(0, 20).forEach((m) => lines.push(`[${m.chatTitle ?? "Telegram"}] ${m.text}`));
+          }
+        }
+      } catch { /* ignore */ }
+      if (lines.length > 0) setLiveFeed(lines);
+    })();
   }, []);
 
   const ask = async (overrideQuery?: string) => {
@@ -94,6 +162,11 @@ function BriefingCard() {
 
     let connCommunities: Array<{ name: string; source: string }> = [];
     try { connCommunities = (JSON.parse(localStorage.getItem("brainiac:tg_chats") ?? "[]") as Array<{ title?: string }>).map((c) => ({ name: c.title ?? "Telegram", source: "Telegram" })); } catch {}
+    try {
+      const dcChannels = JSON.parse(localStorage.getItem("brainiac:discord_channels") ?? "[]") as Array<{ guildName?: string }>;
+      const guildNames = [...new Set(dcChannels.map((c) => c.guildName).filter(Boolean))] as string[];
+      guildNames.forEach((name) => connCommunities.push({ name, source: "Discord" }));
+    } catch {}
 
     const feedContext = liveFeed.length > 0 ? liveFeed.slice(0, 20).join("\n") : undefined;
 
@@ -218,6 +291,7 @@ export default function DashboardPage() {
   const { wallets: privyWallets } = useWallets();
   const { user } = usePrivy();
   const { items: feedItems, loading: feedLoading } = useLiveFeed();
+  const { toast } = useToast();
   const [greeting] = useState(() => {
     const h = new Date().getHours();
     if (h < 12) return "Good morning";
@@ -244,6 +318,7 @@ export default function DashboardPage() {
         <div className="flex items-center gap-2">
           <button
             data-testid="button-notifications"
+            onClick={() => toast({ title: "Notifications", description: "Real-time alerts are on the way. Connect more sources to get notified of high-signal events." })}
             className="relative w-9 h-9 bg-card border border-border rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
           >
             <Bell size={16} />

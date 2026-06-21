@@ -260,10 +260,11 @@ function ContentBrain() {
     },
   });
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!prompt.trim()) return;
     setDraft(null); setError(null);
-    generateMutation.mutate({ data: { type: selectedType.id as "thread" | "recap" | "update" | "brief", topic: prompt, feedContext: null } });
+    const { feedContext: fc } = await buildFeedContext();
+    generateMutation.mutate({ data: { type: selectedType.id as "thread" | "recap" | "update" | "brief", topic: prompt, feedContext: fc || null } });
   };
 
   const TypeIcon = selectedType.icon;
@@ -643,7 +644,7 @@ function BrainChat() {
 
   const getContext = async () => {
     const walletContext = wallets.length
-      ? wallets.map((w) => `- ${w.address} (${w.chainId ?? "EVM"})`).join("\n")
+      ? wallets.map((w) => `- ${w.address} (${w.chainType === "solana" ? "Solana" : "Ethereum"})`).join("\n")
       : "";
     const { feedContext } = await buildFeedContext();
     return { walletContext, feedContext };
