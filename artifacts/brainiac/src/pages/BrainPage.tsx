@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Wand2, Copy, Check, RefreshCw, ChevronDown, FileText, MessageSquare, Mic, Twitter, TrendingUp, Zap, Send, Bot, User, History, Trash2, Plus, Users } from "lucide-react";
+import { Wand2, Copy, Check, RefreshCw, ChevronDown, FileText, MessageSquare, Mic, Twitter, TrendingUp, Zap, Send, Bot, User, History, Trash2, Plus, Users, Cpu } from "lucide-react";
 import { useGenerateDraft } from "@workspace/api-client-react";
 import { useWallets, usePrivy } from "@privy-io/react-auth";
 import { ExternalLink } from "lucide-react";
@@ -127,6 +127,62 @@ function useConnectedCommunities(): Array<{ name: string; source: "Discord" | "T
     }
   } catch {}
   return result;
+}
+
+type FeedMsg = { source: string; server: string; text: string };
+
+async function buildFeedContext(): Promise<{ feedContext: string; feedMessages: FeedMsg[] }> {
+  const msgs: FeedMsg[] = [];
+  const parts: string[] = [];
+
+  // Discord: fetch real messages from tracked channels
+  try {
+    const discordAuth = JSON.parse(localStorage.getItem("brainiac:discord_auth") ?? "null") as {
+      user: { username: string }; accessToken: string;
+    } | null;
+    const discordChannels = JSON.parse(localStorage.getItem("brainiac:discord_channels") ?? "[]") as Array<{
+      channelId: string; channelName: string; guildId: string; guildName: string;
+    }>;
+    if (discordAuth?.accessToken && discordChannels.length > 0) {
+      const lines: string[] = [];
+      for (const ch of discordChannels.slice(0, 3)) {
+        try {
+          const r = await fetch(`/api/discord/messages/${ch.guildId}/${ch.channelId}?limit=15`, {
+            headers: { "x-discord-token": discordAuth.accessToken },
+          });
+          if (r.ok) {
+            const data = await r.json() as { messages?: Array<{ content: string; author: string; timestamp: string }> };
+            (data.messages ?? []).filter((m) => m.content?.trim()).slice(0, 12).forEach((m) => {
+              const d = new Date(m.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+              lines.push(`[${d}] ${m.author}: ${m.content.slice(0, 300)}`);
+              msgs.push({ source: "Discord", server: ch.guildName, text: m.content });
+            });
+          }
+        } catch { /* skip channel */ }
+      }
+      if (lines.length > 0) {
+        parts.push(`Discord messages (${discordChannels.slice(0, 3).map((c) => `#${c.channelName} in ${c.guildName}`).join(", ")}):\n${lines.join("\n")}`);
+      } else {
+        parts.push(`Discord: connected as ${discordAuth.user.username}, tracking ${discordChannels.map((c) => `#${c.channelName}`).join(", ")} — no messages fetched`);
+      }
+    }
+  } catch { /* ignore */ }
+
+  // Telegram: fetch recent bot updates
+  try {
+    const r = await fetch("/api/telegram/updates?limit=20");
+    if (r.ok) {
+      const data = await r.json() as { messages?: Array<{ text: string; chatTitle?: string; from: string; date: string }> };
+      const tgMsgs = (data.messages ?? []).filter((m) => m.text?.trim());
+      if (tgMsgs.length > 0) {
+        const lines = tgMsgs.slice(0, 15).map((m) => `[${m.chatTitle ?? "Telegram"}] ${m.from}: ${m.text.slice(0, 300)}`);
+        parts.push(`Telegram messages:\n${lines.join("\n")}`);
+        tgMsgs.forEach((m) => msgs.push({ source: "Telegram", server: m.chatTitle ?? "Telegram", text: m.text }));
+      }
+    }
+  } catch { /* ignore */ }
+
+  return { feedContext: parts.join("\n\n"), feedMessages: msgs };
 }
 
 function CopyBtn({ text }: { text: string }) {
@@ -378,10 +434,11 @@ function CommunityIntel() {
   const ask = async (q: string) => {
     setInsights(null); setError(null); setLoading(true);
     try {
+      const { feedContext, feedMessages } = await buildFeedContext();
       const res = await fetch("/api/brain/community-intel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: q, communities: connectedCommunities }),
+        body: JSON.stringify({ question: q, communities: connectedCommunities, feedContext, feedMessages }),
       });
       const data = await res.json() as { insights?: string; error?: string };
       if (!res.ok || data.error) throw new Error(data.error);
@@ -559,26 +616,12 @@ function BrainChat() {
       });
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const getContext = () => {
+  const getContext = async () => {
     const walletContext = wallets.length
       ? wallets.map((w) => `- ${w.address} (${w.chainId ?? "EVM"})`).join("\n")
       : "";
-    const tgChats = localStorage.getItem("brainiac:tg_chats");
-    const discordData = localStorage.getItem("brainiac:discord_auth");
-    const parts: string[] = [];
-    if (tgChats) {
-      try {
-        const chats = JSON.parse(tgChats) as Array<{ title?: string }>;
-        if (chats.length) parts.push(`Telegram: ${chats.map((c) => c.title).filter(Boolean).join(", ")}`);
-      } catch { /* ignore */ }
-    }
-    if (discordData) {
-      try {
-        const d = JSON.parse(discordData) as { username?: string };
-        if (d.username) parts.push(`Discord: connected as ${d.username}`);
-      } catch { /* ignore */ }
-    }
-    return { walletContext, feedContext: parts.join("\n") };
+    const { feedContext } = await buildFeedContext();
+    return { walletContext, feedContext };
   };
 
   const send = async (text: string) => {
@@ -590,7 +633,7 @@ function BrainChat() {
     setMessages(next);
     setLoading(true);
     try {
-      const { walletContext, feedContext } = getContext();
+      const { walletContext, feedContext } = await getContext();
       const res = await fetch("/api/brain/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

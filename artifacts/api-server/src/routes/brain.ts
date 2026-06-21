@@ -297,9 +297,11 @@ Question: "${question}"`;
 });
 
 router.post("/community-intel", async (req, res) => {
-  const { question, communities } = req.body as {
+  const { question, communities, feedContext, feedMessages } = req.body as {
     question?: string;
     communities?: Array<{ name: string; source: string }>;
+    feedContext?: string;
+    feedMessages?: Array<{ source: string; server: string; text: string }>;
   };
 
   const apiKey = process.env.QWEN_API_KEYY_BRAINIAC ?? process.env.QWEN_API_KEY;
@@ -309,32 +311,26 @@ router.post("/community-intel", async (req, res) => {
     ? communities.map((c) => `- ${c.name} on ${c.source}`).join("\n")
     : "- Web3 community (Discord + Telegram)";
 
-  const metrics = `
-Community intelligence snapshot (last 30 days):
-- Peak activity: Mon-Fri 2PM-6PM UTC | Weekends 7PM-10PM UTC
-- Dead zone: 2AM-8AM UTC daily (49% drop in message volume)
-- Daily message volume: avg 847 messages, peaks at 2,100+ on announcement days
-- Active member rate: 23% post at least once per week; 41% haven't posted in 14+ days
-- Top topics by share: DeFi yields (34%), NFT launches (22%), Price action (18%), Protocol news (15%), Governance (11%)
-- Fastest growing channel: #alpha-calls (+34% week-over-week)
-- Highest-engagement content: exclusive alpha drops, price alerts, AMA announcements, "hot take" polls
-- Top 3% of members generate 67% of total interactions
-- Member growth: +23% last 30 days
-- Avg response time on hot posts: 4 minutes
-`;
+  const hasRealData = feedContext?.trim() || feedMessages?.length;
 
-  const systemPrompt = `You are Brainiac's community intelligence engine. You analyze Web3 community data and give community managers actionable, specific strategies.
+  const dataBlock = hasRealData
+    ? `Recent messages from your communities:\n${feedContext?.trim() || feedMessages?.map((m) => `[${m.source} / ${m.server}] ${m.text}`).join("\n") || ""}`
+    : `No live message data available — answer based on general Web3 community management best practices.`;
 
-Format: use bold headers (**Timing Strategy**, **Content Strategy**, **Engagement Tactics**, **30-Day Action Plan**) with bullet points. Be specific — reference actual times, topics, and percentages from the data. No generic advice.`;
+  const systemPrompt = `You are Brainiac's community intelligence engine. You analyze what's actually happening in a user's Web3 communities and give specific, actionable intelligence.
+
+${hasRealData
+  ? "You have real message data from the user's connected communities. Base your analysis entirely on what you can see in those messages — specific topics being discussed, active members, sentiment, questions being asked. Do not invent metrics. If you can spot trends, name them. If you can see what's engaging, point it out."
+  : "You don't have live data right now. Give actionable Web3 community management advice based on the question. Be specific and practical."}
+
+Format: short, direct paragraphs or bullet points. Lead with the most useful insight. No filler headers.`;
 
   const userMessage = `My communities:
 ${communityList}
 
-${metrics}
+${dataBlock}
 
-Question: "${question?.trim() || "Give me a complete community intelligence report with a 30-day engagement strategy."}"
-
-Be specific and actionable. Reference the actual metrics.`;
+Question: "${question?.trim() || "What's happening in my community and what should I focus on?"}"`;
 
   try {
     const insights = await callQwen(apiKey, [
