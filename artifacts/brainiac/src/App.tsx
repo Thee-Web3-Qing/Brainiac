@@ -35,23 +35,23 @@ function Router() {
     <>
       <ScrollToTop />
       <Switch>
+        {/* Landing page — no app shell */}
         <Route path="/" component={LandingPage} />
-        <Route path="/dashboard">
-          <AppLayout><DashboardPage /></AppLayout>
+
+        {/* All app routes share ONE persistent AppLayout so navigating between
+            pages never unmounts / reinitialises Privy hooks or the nav shell */}
+        <Route>
+          <AppLayout>
+            <Switch>
+              <Route path="/dashboard"><DashboardPage /></Route>
+              <Route path="/feed"><FeedPage /></Route>
+              <Route path="/wallet"><WalletPage /></Route>
+              <Route path="/brain"><BrainPage /></Route>
+              <Route path="/upgrade"><UpgradePage /></Route>
+              <Route component={NotFound} />
+            </Switch>
+          </AppLayout>
         </Route>
-        <Route path="/feed">
-          <AppLayout><FeedPage /></AppLayout>
-        </Route>
-        <Route path="/wallet">
-          <AppLayout><WalletPage /></AppLayout>
-        </Route>
-        <Route path="/brain">
-          <AppLayout><BrainPage /></AppLayout>
-        </Route>
-        <Route path="/upgrade">
-          <AppLayout><UpgradePage /></AppLayout>
-        </Route>
-        <Route component={NotFound} />
       </Switch>
     </>
   );
